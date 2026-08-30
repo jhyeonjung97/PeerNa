@@ -513,7 +513,7 @@ class Handler(BaseHTTPRequestHandler):
             # which the old estimate did by counting calls alone — overstated
             # the total by more than the checks actually cost.
             heavy = len(PASSES) + 2          # lenses, field expectations, synthesis
-            light = 3                        # cutting, cross-references, citations
+            light = 4                        # cutting, deciding, cross-references, citations
             rate = spec.input_per_mtok / 1_000_000
             out_rate = spec.output_per_mtok / 1_000_000
             estimate = (

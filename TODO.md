@@ -32,11 +32,17 @@ for the model to check one at a time. About $0.005 and 90 seconds. Verified to
 catch a planted `Fig. 5g → 5j` that no mechanical check can see, because 5j
 exists.
 
-**Verdict variance — withdrawn.** Every run says major revision, which was
-recorded as a defect on the assumption that a published paper deserves at worst
-minor. 95% of 600 corpus review files show a revision round: major revision *is*
-the base rate. `Reviewer.decide` was built for this and left unwired, since it
-changed nothing and was right not to.
+**Verdict variance — withdrawn, but the fix was kept.** Every run says major
+revision, which was recorded as a defect on the assumption that a published
+paper deserves at worst minor. 95% of 600 corpus review files show a revision
+round: major revision *is* the base rate.
+
+`Reviewer.decide` settles the recommendation in its own call, against the
+finished comments, starting at minor and requiring the escalating comments to be
+named, with a code check that demotes to minor when none are. It leaves reports
+about published papers untouched — correctly, since their comments do name
+unestablished claims — and moves a report whose comments are all presentation
+from major to minor. Wired in as the last stage.
 
 ## Implementation gaps
 
@@ -66,11 +72,13 @@ offers.
    synthesis. The two verification calls and the Crossref time are not in it, so
    both the price and the ETA now read low.
 
-6. **`Reviewer.decide` is written and unwired.** Deliberate — it changed nothing
-   on published papers, where major revision is the honest answer. It may still
-   be right for a real submission whose report is all presentation comments. The
-   decision is whether to wire it and watch, or delete it; leaving a written and
-   unused method in the class is the one option that costs something.
+6. ~~`Reviewer.decide` is written and unwired.~~ **Wired.** The reason it
+   looked inert was the test: it had only been run on reports about published
+   papers, and every one of those contains a comment saying some central claim
+   is unestablished, which is what major revision means. Given a report whose
+   comments are all presentation — a missing scale bar, an undefined acronym —
+   it moves major revision to minor. There was nothing to change, not nothing
+   it could change.
 
 ## 1. Measure the checks
 

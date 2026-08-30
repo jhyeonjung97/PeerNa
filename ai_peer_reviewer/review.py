@@ -77,6 +77,7 @@ LATER_STAGES = (
     "Field expectations",
     "Consolidating",
     "Cutting it down",
+    "Deciding",
 )
 
 
@@ -515,16 +516,25 @@ class Reviewer:
         else:
             self.reused.append("Consolidation")
 
-        shorter = self._resume_stage("report")
+        shorter = self._resume_stage("condensed")
         if shorter is None:
             if progress:
-                progress(total, total, "Cutting it down")
+                progress(done + 2, total, "Cutting it down")
             self.backend.pace()
             shorter = self.condense(report)
-            self._save_stage("report", shorter)
+            self._save_stage("condensed", shorter)
         else:
             self.reused.append("Cutting")
-        report = shorter
+
+        report = self._resume_stage("report")
+        if report is None:
+            if progress:
+                progress(total, total, "Deciding")
+            self.backend.pace()
+            report = self.decide(shorter)
+            self._save_stage("report", report)
+        else:
+            self.reused.append("Decision")
 
         usage = self.backend.usage
         if self.checkpoint:
