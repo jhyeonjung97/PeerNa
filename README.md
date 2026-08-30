@@ -1,4 +1,4 @@
-# AI Peer Reviewer
+# PeerNa
 
 Referee-style review of a scientific manuscript. Reads the paper through four
 separate lenses, verifies its citations against the live web, and consolidates
@@ -149,6 +149,9 @@ at 100 PDF pages; the others hold 1M+.
 
 ## Building a benchmark corpus
 
+The corpus itself is not in this repository — it is 1.2 GB of publisher PDFs.
+Rebuild it with the commands below.
+
 Nature Communications publishes referee reports for papers whose authors opted
 into transparent peer review. That makes it possible to check what this tool
 says about a paper against what the real reviewers said.
@@ -186,16 +189,26 @@ summary says how many of the matched papers actually had one.
 
 ```
 ai_peer_reviewer/
-├── cli.py       entry point, cost preview, confidentiality gate
-├── config.py    API key resolution, cloud-sync warning
-├── models.py    per-model capability registry (provider, effort, limits, pricing)
-├── loader.py    manuscript → provider-neutral parts
-├── parts.py     the neutral content types
-├── backends.py  Anthropic and OpenAI request/response handling
-├── passes.py    the four lenses and the system prompts
-├── schema.py    the review structure the model fills
-├── review.py    pass orchestration and consolidation
-├── render.py    structure → Markdown or self-contained HTML
+├── cli.py           entry point, cost preview, confidentiality gate
+├── serve.py         local web UI, reusing the same review path as the CLI
+├── config.py        API key resolution, cloud-sync warning
+├── models.py        per-model capability registry (provider, effort, limits, pricing)
+├── loader.py        manuscript → provider-neutral parts
+├── parts.py         the neutral content types
+├── backends.py      Anthropic and OpenAI request/response handling
+├── passes.py        the four lenses and the system prompts
+├── schema.py        the review structure the model fills
+├── review.py        pass orchestration and consolidation
+├── checkpoint.py    completed passes persisted so a failed run resumes
+├── checks.py        deterministic consistency checks a model cannot be trusted with
+├── render.py        structure → Markdown or self-contained HTML
+├── export.py        finished report → PDF (headless Chrome) or DOCX
+├── history.py       where finished reviews are recorded, shared by CLI and server
+├── notify.py        desktop and email notification when a run finishes
+├── fetch.py         Nature Communications papers with their referee reports
+├── harvest.py       the same at scale, text only
+├── corpus_index.py  what referees demanded of similar papers, by similarity
+└── embed_index.py   rebuild the similarity index without re-harvesting
 ```
 
 Three seams, so a change lands in one place:
