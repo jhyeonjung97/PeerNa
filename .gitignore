@@ -1,0 +1,31 @@
+# Secrets. Note that .gitignore hides files from git only — it does NOT stop
+# Google Drive, Dropbox, or iCloud from syncing them. Keep the real key in
+# ~/.config/ai-peer-reviewer/.env, outside any synced folder.
+.env
+*.key
+
+__pycache__/
+*.pyc
+.DS_Store
+
+# Benchmark corpus. 1.2 GB of publisher PDFs — regenerate with
+#   python -m ai_peer_reviewer.fetch "<query>" --limit N --out corpus
+corpus/
+downloads_*/
+*.pdf
+*.docx
+
+# Review output. May contain manuscript text under confidentiality.
+*-review.md
+*-report.md
+*-notes.md
+/*.html
+review*.md
+final-review.md
+terse-test.md
+cite-sep.md
+referee-style.md
+
+# Run state
+.cache/
+runs/

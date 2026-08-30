@@ -1,0 +1,9 @@
+anthropic>=1.0
+openai>=3.3
+pydantic>=2.0
+pymupdf>=1.24
+python-docx>=1.1
+
+# Optional: makes the OpenAI cost estimate more accurate. Without it the
+# estimate falls back to a characters/4 approximation.
+tiktoken
