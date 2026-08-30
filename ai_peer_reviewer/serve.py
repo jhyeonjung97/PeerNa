@@ -359,6 +359,28 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         path = self.path.split("?", 1)[0]
 
+        if path == "/healthz":
+            # A platform polls this every few seconds to decide whether the
+            # service is alive. Answering with the full page would send the
+            # whole interface each time and, worse, would report healthy on a
+            # process that can serve a file but has lost its credentials. This
+            # checks the two things a review actually needs.
+            reviews = [
+                name for name in models.ALIASES
+                if config.has_credentials(models.REGISTRY[name].provider)
+            ]
+            healthy = bool(reviews) and WEB_ROOT.is_dir()
+            return self._json(
+                200 if healthy else 503,
+                {
+                    "ok": healthy,
+                    "models": reviews,
+                    "running": sum(
+                        1 for job in JOBS.values() if job.get("status") == "running"
+                    ),
+                },
+            )
+
         if path in ("/", "/index.html"):
             return self._serve_file(WEB_ROOT / "index.html")
 

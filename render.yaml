@@ -9,7 +9,7 @@ services:
     name: peerna
     runtime: docker
     plan: starter          # the free plan sleeps when idle, which ends a review in flight
-    healthCheckPath: /
+    healthCheckPath: /healthz
     autoDeploy: true
 
     disk:
@@ -20,10 +20,12 @@ services:
     envVars:
       # Set the value in the Render dashboard, never here. sync: false keeps it
       # out of the repository and out of every build log.
-      - key: OPENAI_API_KEY
+      # Whichever account has credit. See TODO §7 — the router expires at the
+      # end of August 2026 and OpenAI's own endpoint is the better home anyway.
+      - key: MONO_ROURTER_API_KEY
         sync: false
       - key: AI_PEER_REVIEWER_MODEL
-        value: luna
+        value: r-luna
       # Uncomment only with an agreement actually in place; it refuses the
       # models that would make the claim false.
       # - key: AI_PEER_REVIEWER_ZERO_RETENTION
