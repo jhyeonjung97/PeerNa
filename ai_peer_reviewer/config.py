@@ -70,9 +70,22 @@ def load() -> None:
 
 
 def has_credentials(provider: str = "anthropic") -> bool:
-    if provider == "openai":
-        return bool(os.environ.get(OPENAI_KEY_NAME))
-    if os.environ.get(KEY_NAME) or os.environ.get("ANTHROPIC_AUTH_TOKEN"):
+    """Whether a key for this provider is present.
+
+    Providers were once a closed pair and this function knew both by name. A
+    third arrived and was not added, so the models that were the only ones with
+    a working key showed up in the browser as unavailable and greyed out. The
+    mapping lives in one place now — the registry — and adding a provider means
+    adding it there and nowhere else.
+    """
+    from .models import CREDENTIAL_ENV
+
+    name = CREDENTIAL_ENV.get(provider)
+    if name and os.environ.get(name):
+        return True
+    if provider != "anthropic":
+        return False
+    if os.environ.get("ANTHROPIC_AUTH_TOKEN"):
         return True
     # An `ant auth login` profile also works; the SDK finds it without help.
     return (Path.home() / ".config" / "anthropic").exists()
@@ -140,8 +153,9 @@ def save_key(provider: str, key: str) -> None:
 
 def key_hint(provider: str) -> str | None:
     """A few trailing characters, enough to tell two keys apart. Never the key."""
-    name = OPENAI_KEY_NAME if provider == "openai" else KEY_NAME
-    value = os.environ.get(name) or ""
+    from .models import CREDENTIAL_ENV
+
+    value = os.environ.get(CREDENTIAL_ENV.get(provider, "")) or ""
     return f"…{value[-4:]}" if len(value) >= 8 else None
 
 
