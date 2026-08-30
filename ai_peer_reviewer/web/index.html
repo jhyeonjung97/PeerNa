@@ -1,0 +1,725 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PeerNa</title>
+<link rel="icon" href="/logo.svg" type="image/svg+xml">
+<style>
+:root {
+  color-scheme: light dark;
+  --bg: #fbfaf9; --panel: #fff; --ink: #1a1815; --muted: #6b6560;
+  --rule: #e3ded8; --accent: #2f5d8a; --warn: #a02c2c; --warn-bg: #fdf3f2;
+  --ok: #2f6b46;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #161513; --panel: #1e1d1a; --ink: #eae6e0; --muted: #9b948c;
+    --rule: #33302b; --accent: #8ab4dd; --warn: #f08b84; --warn-bg: #2a1c1b;
+    --ok: #7dc79b;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding: 2.5rem 1.25rem 4rem; background: var(--bg); color: var(--ink);
+  font: 15px/1.6 ui-sans-serif, system-ui, -apple-system, sans-serif;
+}
+main { max-width: 44rem; margin: 0 auto; }
+h1 { font-size: 1.5rem; margin: 0 0 .3rem; font-weight: 650;
+     display: flex; align-items: center; gap: .55rem; }
+.logo { width: 1.6em; height: 1.6em; flex: none; color: var(--accent); }
+.lede { color: var(--muted); margin: 0 0 2rem; }
+fieldset { border: 1px solid var(--rule); border-radius: 8px; padding: 1.1rem 1.25rem 1.25rem; margin: 0 0 1.1rem; background: var(--panel); }
+legend { font-size: .74rem; text-transform: uppercase; letter-spacing: .09em; color: var(--muted); font-weight: 700; padding: 0 .4rem; }
+
+#drop {
+  border: 2px dashed var(--rule); border-radius: 8px; padding: 2.2rem 1rem;
+  text-align: center; cursor: pointer; transition: border-color .15s, background .15s;
+}
+#drop.over, #drop:hover { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 6%, transparent); }
+#drop.loaded { border-style: solid; border-color: var(--ok); text-align: left; padding: 1rem 1.2rem; }
+#drop .hint { color: var(--muted); font-size: .88rem; margin-top: .35rem; }
+
+/* The supplementary file is optional, so it is drawn quieter than the
+   manuscript — smaller, lighter, and only worth noticing once the manuscript
+   is in place. */
+#siDrop {
+  position: relative; margin-top: .7rem; padding: .7rem 1rem; text-align: center;
+  border: 1px dashed var(--rule); border-radius: 8px; cursor: pointer;
+  color: var(--muted); font-size: .9rem;
+}
+#siDrop.over, #siDrop:hover { border-color: var(--accent); color: var(--ink); }
+#siDrop.loaded { border-style: solid; border-color: var(--ok); text-align: left; }
+#siDrop .hint { font-size: .82rem; margin-top: .2rem; }
+#siDrop input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+#fileName { font-weight: 600; }
+input[type=file] { display: none; }
+
+.row { display: flex; gap: 1.5rem; flex-wrap: wrap; }
+.row > label { display: flex; align-items: baseline; gap: .4rem; }
+select { font: inherit; padding: .3rem .5rem; border-radius: 5px; border: 1px solid var(--rule); background: var(--panel); color: var(--ink); }
+.opt { display: flex; align-items: flex-start; gap: .5rem; margin-top: .7rem; }
+.opt small { color: var(--muted); display: block; }
+
+.top { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+.top .lede { margin-bottom: 2rem; }
+button.small { padding: .35rem .8rem; font-size: .85rem; flex: none; }
+
+#keyPanel {
+  position: fixed; inset: 0; background: rgba(0,0,0,.45);
+  display: flex; align-items: center; justify-content: center; padding: 1.25rem; z-index: 10;
+}
+#keyPanel[hidden] { display: none; }
+.sheet {
+  background: var(--panel); border: 1px solid var(--rule); border-radius: 10px;
+  width: min(32rem, 100%); max-height: 85vh; overflow: auto; padding: 1.3rem 1.5rem 1.5rem;
+}
+.sheetTop { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; }
+.sheetTop h2 { margin: 0; font-size: 1.05rem; }
+.x { background: none; border: none; color: var(--muted); font-size: 1.5rem; line-height: 1; padding: 0 .2rem; cursor: pointer; }
+
+.prov { border-top: 1px solid var(--rule); padding: 1rem 0 .2rem; }
+.prov:first-child { border-top: none; padding-top: 0; }
+.provHead { display: flex; align-items: baseline; justify-content: space-between; gap: .6rem; }
+.provName { font-weight: 650; }
+.provState { font-size: .85rem; color: var(--muted); white-space: nowrap; }
+.provState .dot { font-size: .7rem; }
+.provState.on .dot { color: var(--ok); }
+.provState.off .dot { color: var(--muted); }
+.provModels { color: var(--muted); font-size: .84rem; margin: .15rem 0 0; }
+.provForm { display: flex; gap: .5rem; margin-top: .7rem; flex-wrap: wrap; }
+.provForm input {
+  font: inherit; font-family: ui-monospace, monospace; font-size: .88rem;
+  flex: 1 1 15rem; min-width: 10rem; padding: .45rem .6rem;
+  border: 1px solid var(--rule); border-radius: 5px; background: var(--bg); color: var(--ink);
+}
+.provForm button { padding: .45rem 1rem; font-size: .88rem; }
+.provNote { flex-basis: 100%; margin: .15rem 0 0; font-size: .84rem; color: var(--muted); }
+.provNote.bad { color: var(--warn); }
+.provNote.good { color: var(--ok); }
+.provLink { font-size: .84rem; }
+.provLink a { color: var(--accent); }
+.foot { margin: 1.2rem 0 0; font-size: .82rem; color: var(--muted); line-height: 1.5; }
+.foot code { font-size: .95em; }
+
+.notice {
+  border-left: 3px solid var(--warn); background: var(--warn-bg); color: var(--ink);
+  padding: .7rem .95rem; margin: 0 0 1.2rem; font-size: .87rem; border-radius: 0 5px 5px 0;
+}
+
+button {
+  font: inherit; font-weight: 600; padding: .6rem 1.4rem; border-radius: 6px;
+  border: 1px solid var(--accent); background: var(--accent); color: #fff; cursor: pointer;
+}
+button:disabled { opacity: .45; cursor: not-allowed; }
+button.ghost { background: transparent; color: var(--accent); }
+
+#estimate, #status { font-size: .9rem; color: var(--muted); margin-top: .8rem; }
+#notes li { color: var(--muted); font-size: .87rem; }
+.bar { height: 5px; background: var(--rule); border-radius: 3px; overflow: hidden; margin: .6rem 0; }
+.bar > i { display: block; height: 100%; background: var(--accent); width: 0; transition: width .4s; }
+
+#historyList li.running { border-color: var(--accent); }
+#historyList .prog { display: flex; align-items: center; gap: .45rem; color: var(--accent); font-size: .84rem; white-space: nowrap; }
+#historyList .prog .spinner { width: 13px; height: 13px; border-width: 2px; }
+.spinner {
+  width: 18px; height: 18px; flex: none; border-radius: 50%;
+  border: 2px solid var(--rule); border-top-color: var(--accent);
+  animation: spin .8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .spinner { animation-duration: 2.4s; }
+}
+#historyList .clock { color: var(--muted); font-variant-numeric: tabular-nums; font-size: .8rem; }
+.err { color: var(--warn); background: var(--warn-bg); border: 1px solid var(--warn); padding: .7rem .9rem; border-radius: 6px; font-size: .89rem; white-space: pre-wrap; }
+#result { display: none; }
+#result.show { display: block; }
+#history { display: none; margin-top: 2.5rem; }
+#history.show { display: block; }
+#history h2, #result h2 { font-size: 1rem; margin: 0 0 .2rem; }
+#historyList { list-style: none; padding: 0; margin: 0; }
+#historyList li {
+  display: flex; align-items: baseline; gap: .6rem; padding: .5rem .7rem;
+  border: 1px solid var(--rule); border-radius: 6px; margin-bottom: .4rem;
+  background: var(--panel); cursor: pointer;
+}
+#historyList li:hover { border-color: var(--accent); }
+#historyList .name { font-weight: 600; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#historyList .meta { color: var(--muted); font-size: .82rem; white-space: nowrap; }
+#historyList .bad { color: var(--warn); }
+iframe { width: 100%; height: 70vh; border: 1px solid var(--rule); border-radius: 8px; background: #fff; }
+.actions { display: flex; gap: .8rem; margin-top: .9rem; flex-wrap: wrap; align-items: center; }
+.dl { display: flex; gap: .4rem; align-items: center; font-size: .88rem; color: var(--muted); }
+.dlNote { font-size: .85rem; color: var(--warn); flex-basis: 100%; margin: .3rem 0 0; }
+</style>
+</head>
+<body>
+<main>
+  <header class="top">
+    <div>
+      <h1><svg class="logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="PeerNa">
+  <title>PeerNa</title>
+  <!--
+    A bud seen from above, mid-opening: each petal is a sheet of paper, folded
+    at one corner the way a page is. The manuscript is what blooms.
+
+    Drawn on a 64-unit grid with heavy strokes so it survives being shrunk to a
+    16px favicon, where thin lines and small detail disappear. currentColor
+    everywhere, so it inherits the page's ink in light and dark alike.
+  -->
+  <g fill="none" stroke="currentColor" stroke-width="3.4"
+     stroke-linejoin="round" stroke-linecap="round">
+
+    <!-- four petals, each a page rotated about the centre -->
+    <g>
+      <path d="M32 30 L32 8 L44 12 L44 30 Z"/>
+      <path d="M44 12 L38.5 14 L38.5 8.3" stroke-width="2.2"/>
+    </g>
+    <g transform="rotate(90 32 32)">
+      <path d="M32 30 L32 8 L44 12 L44 30 Z"/>
+      <path d="M44 12 L38.5 14 L38.5 8.3" stroke-width="2.2"/>
+    </g>
+    <g transform="rotate(180 32 32)">
+      <path d="M32 30 L32 8 L44 12 L44 30 Z"/>
+      <path d="M44 12 L38.5 14 L38.5 8.3" stroke-width="2.2"/>
+    </g>
+    <g transform="rotate(270 32 32)">
+      <path d="M32 30 L32 8 L44 12 L44 30 Z"/>
+      <path d="M44 12 L38.5 14 L38.5 8.3" stroke-width="2.2"/>
+    </g>
+
+    <!-- the centre: still closed, the part under review -->
+    <circle cx="32" cy="32" r="5.2"/>
+  </g>
+</svg> PeerNa</h1>
+      <p class="lede">Drop in a manuscript. Runs on your machine, billed to your own API key.</p>
+    </div>
+    <button type="button" class="ghost small" id="openKeys">API keys</button>
+  </header>
+
+  <p class="notice">
+    Reviewing a manuscript for a journal? Elsevier, ACS, Springer Nature and NIH
+    among others restrict uploading manuscripts under review to AI tools — check
+    the journal's reviewer policy first.
+  </p>
+
+  <form id="form">
+    <fieldset>
+      <legend>Manuscript</legend>
+      <div id="drop">
+        <div id="dropIdle">
+          <strong>Drop a PDF here</strong>
+          <div class="hint">or click to choose &middot; PDF, DOCX, LaTeX, or text</div>
+        </div>
+        <div id="dropLoaded" hidden>
+          <span id="fileName"></span>
+          <div class="hint" id="fileMeta"></div>
+        </div>
+        <input type="file" id="file" accept=".pdf,.docx,.tex,.txt,.md">
+      </div>
+      <div id="siDrop">
+        <div id="siIdle">
+          <strong>Supplementary information</strong>
+          <div class="hint">optional &middot; drop or click &middot; PDF</div>
+        </div>
+        <div id="siLoaded" hidden>
+          <span id="siName"></span>
+          <div class="hint" id="siMeta"></div>
+        </div>
+        <input type="file" id="siFile" accept=".pdf">
+      </div>
+      <ul id="notes"></ul>
+      <div id="estimate"></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Settings</legend>
+      <div class="row">
+        <label>Model <select id="model"></select></label>
+      </div>
+      <label class="opt">
+        <input type="checkbox" id="noSearch">
+        <span>Skip citation verification
+          <small>Faster and cheaper, but nothing is checked against the literature.</small>
+        </span>
+      </label>
+    </fieldset>
+
+
+    <button id="go" type="submit" disabled>Start review</button>
+    <div id="status"></div>
+  </form>
+
+  <div id="keyPanel" hidden>
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="keyTitle">
+      <div class="sheetTop">
+        <h2 id="keyTitle">API keys</h2>
+        <button type="button" class="x" id="closeKeys" aria-label="Close">&times;</button>
+      </div>
+      <div id="providerList"></div>
+      <p class="foot">
+        Stored in <code id="keyPath">~/.config/ai-peer-reviewer/.env</code>, readable only by you.
+        Keys never leave this computer except to the provider they belong to.
+      </p>
+    </div>
+  </div>
+
+  <section id="history" class="show">
+    <h2>Reviews</h2>
+    <p class="lede" style="margin:.2rem 0 .8rem">Kept on this machine. Safe to refresh — a run in progress keeps going.</p>
+    <ul id="historyList"></ul>
+  </section>
+
+  <section id="result">
+    <h2>Report</h2>
+    <iframe id="frame" title="Review report"></iframe>
+    <div class="actions">
+      <span class="dl">Download
+        <button class="ghost small" data-fmt="pdf" type="button">PDF</button>
+        <button class="ghost small" data-fmt="docx" type="button">Word</button>
+        <button class="ghost small" data-fmt="md" type="button">Markdown</button>
+        <button class="ghost small" data-fmt="html" type="button">HTML</button>
+      </span>
+      <button class="ghost" id="again" type="button">Review another</button>
+    </div>
+  </section>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let upload = null, si = null, poll = null, currentJob = null;
+let etaSeconds = null, startedAt = null, ticker = null;
+
+// A review takes ten minutes and costs money, so the page must survive a
+// refresh. The running job id lives in localStorage and finished reports live
+// on the server, so reloading reattaches instead of losing the work.
+const LAST_JOB = "aipr.lastJob";
+
+// -- model list -------------------------------------------------------------
+let MODELS = [];
+
+function loadModels(keep) {
+  return fetch("/api/models").then(r => r.json()).then(d => {
+    MODELS = d.models;
+    const want = keep || $("model").value || d.default;
+    $("model").innerHTML = "";
+    for (const m of d.models) {
+      const o = document.createElement("option");
+      o.value = m.key;
+      o.textContent = `${m.label}${m.ready ? "" : "  (no API key)"}`;
+      o.disabled = !m.ready;
+      o.title = m.note;
+      if (m.key === want) o.selected = true;
+      $("model").append(o);
+    }
+    if ($("model").selectedIndex < 0) {
+      const first = d.models.find(m => m.ready);
+      if (first) $("model").value = first.key;
+    }
+  });
+}
+loadModels();
+
+// -- API keys panel --------------------------------------------------------
+const PROVIDERS = [
+  { id: "openai", label: "OpenAI", url: "https://platform.openai.com/api-keys" },
+  { id: "anthropic", label: "Anthropic", url: "https://platform.claude.com/settings/keys" },
+];
+
+function renderProviders() {
+  $("providerList").innerHTML = PROVIDERS.map(p => {
+    const mine = MODELS.filter(m => m.provider === p.id);
+    const set = mine.some(m => m.ready);
+    const hint = mine.find(m => m.hint)?.hint;
+    return `<div class="prov" data-provider="${p.id}">
+      <div class="provHead">
+        <span class="provName">${p.label}</span>
+        <span class="provState ${set ? "on" : "off"}">
+          <span class="dot">${set ? "●" : "○"}</span>
+          ${set ? `set${hint ? ` (${hint})` : ""}` : "not set"}
+        </span>
+      </div>
+      <p class="provModels">${mine.map(m => m.key).join(", ")}</p>
+      <div class="provForm">
+        <input type="password" placeholder="${set ? "Paste a new key to replace" : "Paste the key"}"
+               autocomplete="off" spellcheck="false">
+        <button type="button" class="save">Save</button>
+        <p class="provNote"></p>
+      </div>
+      <p class="provLink"><a href="${p.url}" target="_blank" rel="noreferrer">Get a key →</a></p>
+    </div>`;
+  }).join("");
+
+  for (const block of $("providerList").querySelectorAll(".prov")) {
+    const provider = block.dataset.provider;
+    const input = block.querySelector("input");
+    const button = block.querySelector(".save");
+    const note = block.querySelector(".provNote");
+    const submit = () => {
+      const key = input.value.trim();
+      note.className = "provNote";
+      note.textContent = "Checking with the provider…";
+      button.disabled = true;
+      post("/api/key", { provider, key }).then(d => {
+        button.disabled = false;
+        if (d.error) {
+          note.className = "provNote bad";
+          note.textContent = d.error;
+          return;
+        }
+        input.value = "";
+        loadModels($("model").value).then(() => {
+          renderProviders();
+          const fresh = $("providerList")
+            .querySelector(`.prov[data-provider="${provider}"] .provNote`);
+          if (fresh) {
+            fresh.className = "provNote good";
+            fresh.textContent = "Saved. Models using this provider are ready.";
+          }
+          estimate();
+        });
+      });
+    };
+    button.onclick = submit;
+    input.onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); submit(); } };
+  }
+}
+
+function openKeys() {
+  renderProviders();
+  $("keyPanel").hidden = false;
+  $("keyPanel").querySelector("input")?.focus();
+}
+function closeKeys() { $("keyPanel").hidden = true; }
+
+// -- file selection ---------------------------------------------------------
+const drop = $("drop");
+
+// A file dropped anywhere else would make the browser navigate to it, throwing
+// away the page and any review in progress. Swallow drags everywhere, and only
+// act on the ones that land in the zone.
+for (const type of ["dragover", "drop"]) {
+  window.addEventListener(type, (e) => e.preventDefault());
+}
+
+drop.addEventListener("click", (e) => {
+  // The input lives inside the zone, so its own click bubbles back here and
+  // would reopen the picker a second time.
+  if (e.target.id !== "file") $("file").click();
+});
+drop.addEventListener("dragenter", () => drop.classList.add("over"));
+drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("over"); });
+drop.addEventListener("dragleave", (e) => {
+  if (!drop.contains(e.relatedTarget)) drop.classList.remove("over");
+});
+drop.addEventListener("drop", (e) => {
+  e.preventDefault();
+  drop.classList.remove("over");
+  const f = e.dataTransfer?.files?.[0];
+  if (f) take(f);
+});
+$("file").addEventListener("change", (e) => {
+  if (e.target.files[0]) take(e.target.files[0]);
+});
+
+// -- supplementary ----------------------------------------------------------
+const siDrop = $("siDrop");
+siDrop.addEventListener("dragenter", () => siDrop.classList.add("over"));
+siDrop.addEventListener("dragover", (e) => { e.preventDefault(); siDrop.classList.add("over"); });
+siDrop.addEventListener("dragleave", (e) => {
+  if (!siDrop.contains(e.relatedTarget)) siDrop.classList.remove("over");
+});
+siDrop.addEventListener("drop", (e) => {
+  e.preventDefault();
+  siDrop.classList.remove("over");
+  const f = e.dataTransfer?.files?.[0];
+  if (f) takeSupplementary(f);
+});
+$("siFile").addEventListener("change", (e) => {
+  if (e.target.files[0]) takeSupplementary(e.target.files[0]);
+});
+
+function takeSupplementary(f) {
+  if (!f.name.toLowerCase().endsWith(".pdf")) {
+    $("siMeta").innerHTML = '<span class="err">Supplementary information must be a PDF.</span>';
+    $("siIdle").hidden = true; $("siLoaded").hidden = false;
+    $("siName").textContent = f.name;
+    return;
+  }
+  const reader = new FileReader();
+  reader.onerror = () => {
+    $("siMeta").innerHTML = '<span class="err">Could not read that file.</span>';
+  };
+  reader.onload = () => {
+    $("siIdle").hidden = true;
+    $("siLoaded").hidden = false;
+    siDrop.classList.add("loaded");
+    $("siName").textContent = f.name;
+    $("siMeta").textContent = "Uploading…";
+    post("/api/upload", { filename: f.name, data: reader.result.split(",")[1] })
+      .then(d => {
+        if (d.error) { $("siMeta").innerHTML = `<span class="err">${d.error}</span>`; return; }
+        si = { upload_id: d.upload_id, filename: d.filename };
+        $("siMeta").textContent = `${(f.size / 1e6).toFixed(1)} MB — click to replace`;
+      });
+  };
+  reader.readAsDataURL(f);
+}
+
+const ALLOWED = [".pdf", ".docx", ".tex", ".txt", ".md"];
+
+function take(f) {
+  const ext = f.name.slice(f.name.lastIndexOf(".")).toLowerCase();
+  if (!ALLOWED.includes(ext)) {
+    $("estimate").innerHTML =
+      `<span class="err">${f.name} is a ${ext || "file"} — accepted: ${ALLOWED.join(", ")}</span>`;
+    return;
+  }
+  $("estimate").textContent = "Reading the file…";
+  const reader = new FileReader();
+  reader.onerror = () => {
+    $("estimate").innerHTML = '<span class="err">Could not read that file.</span>';
+  };
+  reader.onload = () => {
+    $("dropIdle").hidden = true;
+    $("dropLoaded").hidden = false;
+    drop.classList.add("loaded");
+    $("fileName").textContent = f.name;
+    $("fileMeta").textContent = `${(f.size / 1e6).toFixed(1)} MB — click to replace`;
+    $("estimate").textContent = "Uploading…";
+    // Sent once. Every later call refers to it by id, so changing the model does
+    // not push another few megabytes of base64 across.
+    post("/api/upload", { filename: f.name, data: reader.result.split(",")[1] })
+      .then(d => {
+        if (d.error) { $("estimate").innerHTML = `<span class="err">${d.error}</span>`; return; }
+        upload = { upload_id: d.upload_id, filename: d.filename };
+        gate();
+        estimate();
+      });
+  };
+  reader.readAsDataURL(f);
+}
+
+// -- cost preview -----------------------------------------------------------
+function estimate() {
+  if (!upload) return;
+  $("estimate").textContent = "Estimating…";
+  $("notes").innerHTML = "";
+  post("/api/estimate", body()).then(d => {
+    if (d.error) { $("estimate").innerHTML = `<span class="err">${d.error}</span>`; return; }
+    etaSeconds = d.eta ?? null;
+    const eta = etaSeconds ? ` · about ${fmtMins(etaSeconds)}` : "";
+    $("estimate").textContent =
+      `~${d.tokens.toLocaleString()} tokens, ${d.calls} calls, estimated $${d.estimate.toFixed(2)}${eta}.`;
+    $("notes").innerHTML = (d.notes || []).map(n => `<li>${n}</li>`).join("");
+  });
+}
+
+
+$("noSearch").onchange = estimate;
+
+
+
+$("openKeys").onclick = openKeys;
+$("closeKeys").onclick = closeKeys;
+$("keyPanel").onclick = (e) => { if (e.target === $("keyPanel")) closeKeys(); };
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !$("keyPanel").hidden) closeKeys();
+});
+
+$("model").onchange = estimate;
+function gate() {
+  $("go").disabled = !upload;
+}
+
+const body = () => ({
+  upload_id: upload?.upload_id,
+  supplementary_id: si?.upload_id,
+  model: $("model").value,
+  no_web_search: $("noSearch").checked,
+  confidentiality_confirmed: true,
+});
+
+const post = (url, payload) =>
+  fetch(url, { method: "POST", body: JSON.stringify(payload) })
+    .then(r => r.json())
+    .catch(e => ({ error: String(e) }));
+
+// -- run --------------------------------------------------------------------
+$("form").addEventListener("submit", (e) => {
+  // Guard first: anything that throws before this would let the browser submit
+  // the form for real, which reloads the page and loses the upload.
+  e.preventDefault();
+  $("go").disabled = true;
+  $("status").textContent = "Started — progress is in the list below.";
+  post("/api/review", body()).then(d => {
+    if (d.error) { fail(d.error); return; }
+    attach(d.job_id);
+  });
+});
+
+const fmtMins = (s) => s < 90 ? `${Math.round(s)}s` : `${Math.round(s / 60)} min`;
+const fmtClock = (s) => {
+  const m = Math.floor(s / 60), r = Math.floor(s % 60);
+  return `${m}:${String(r).padStart(2, "0")}`;
+};
+
+// Progress lives in the review list, not in a panel of its own: one place to
+// look, and a running job sits next to the finished ones it will join.
+function attach(id) {
+  currentJob = id;
+  localStorage.setItem(LAST_JOB, id);
+  clearInterval(poll);
+  loadHistory();
+  poll = setInterval(() => check(id), 2000);
+  clearInterval(ticker);
+  ticker = setInterval(paintClocks, 1000);
+}
+
+function stopPolling() {
+  clearInterval(poll);
+  clearInterval(ticker);
+  poll = ticker = null;
+}
+
+function paintClocks() {
+  for (const el of document.querySelectorAll("#historyList .clock[data-since]")) {
+    const gone = (Date.now() - Number(el.dataset.since)) / 1000;
+    let text = fmtClock(gone);
+    if (etaSeconds) {
+      const left = etaSeconds - gone;
+      text += left > 20 ? ` · ~${fmtMins(left)} left` : " · finishing";
+    }
+    el.textContent = text;
+  }
+}
+
+function check(id) {
+  fetch(`/api/job/${id}`).then(r => r.json()).then(j => {
+    if (j.error && j.status !== "error") return;
+    if (j.status === "error") {
+      stopPolling();
+      localStorage.removeItem(LAST_JOB);
+      loadHistory();
+      fail(j.error);
+      return;
+    }
+    if (j.status === "done") {
+      stopPolling();
+      localStorage.removeItem(LAST_JOB);
+      $("status").textContent = "";
+      loadHistory();
+      show(j.html, j.filename, id);
+      return;
+    }
+    loadHistory();
+  });
+}
+
+function show(html, name, jobId) {
+  $("result").classList.add("show");
+  $("frame").srcdoc = html;
+  const id = jobId || currentJob;
+  document.querySelector(".dlNote")?.remove();
+
+  for (const b of document.querySelectorAll(".dl button")) {
+    b.onclick = async () => {
+      if (!id) return;
+      const fmt = b.dataset.fmt;
+      const was = b.textContent;
+      b.textContent = "…";
+      b.disabled = true;
+      try {
+        // PDF and Word are produced on the server, so a failure arrives as JSON
+        // rather than a file — say so instead of saving an unreadable download.
+        const r = await fetch(`/api/download/${id}?format=${fmt}`);
+        if (!r.ok) {
+          const d = await r.json().catch(() => ({}));
+          document.querySelector(".actions").insertAdjacentHTML("beforeend",
+            `<p class="dlNote">${d.error || "Download failed."}</p>`);
+          return;
+        }
+        const blob = await r.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = (r.headers.get("content-disposition") || "")
+          .match(/filename="([^"]+)"/)?.[1] || `review.${fmt}`;
+        a.click();
+        URL.revokeObjectURL(url);
+      } finally {
+        b.textContent = was;
+        b.disabled = false;
+      }
+    };
+  }
+  $("result").scrollIntoView({ behavior: "smooth" });
+}
+
+// -- history ----------------------------------------------------------------
+function loadHistory() {
+  fetch("/api/jobs").then(r => r.json()).then(d => {
+    const rows = d.jobs || [];
+    if (!rows.length) return;
+    $("history").classList.add("show");
+    $("historyList").innerHTML = rows.map(j => {
+      if (j.status === "running" || j.status === "queued") {
+        const since = j.started_at ? j.started_at * 1000 : Date.now();
+        return `<li class="running" data-id="${j.job_id}">
+          <span class="name">${j.filename}</span>
+          <span class="prog"><span class="spinner"></span>
+            [${j.step ?? 0}/${j.total ?? 5}] ${j.stage || "starting"}</span>
+          <span class="clock" data-since="${since}"></span>
+        </li>`;
+      }
+      const when = new Date(j.finished * 1000).toLocaleString();
+      const took = j.duration ? ` · ${fmtClock(j.duration)}` : "";
+      const cost = j.cost != null ? `$${j.cost.toFixed(2)}` : "";
+      const bad = j.status !== "done" ? " bad" : "";
+      return `<li data-id="${j.job_id}">
+        <span class="name">${j.filename}</span>
+        <span class="meta${bad}">${j.status === "done" ? cost + took : j.status} · ${when}</span>
+      </li>`;
+    }).join("");
+    paintClocks();
+    for (const li of $("historyList").children) {
+      if (li.classList.contains("running")) continue;
+      li.onclick = () => open_(li.dataset.id, li.querySelector(".name").textContent);
+    }
+  });
+}
+
+function open_(id, name) {
+  fetch(`/api/job/${id}`).then(r => r.json()).then(j => {
+    if (j.html) show(j.html, name, id);
+    else if (j.error) fail(j.error);
+  });
+}
+
+// reattach to a run that was in flight when the page was last closed
+window.addEventListener("load", () => {
+  loadHistory();
+  // Nothing works without a key, so say so straight away rather than letting
+  // the user find out when every model in the list is greyed out.
+  if (MODELS.length && !MODELS.some(m => m.ready)) openKeys();
+  const pending = localStorage.getItem(LAST_JOB);
+  if (!pending) return;
+  fetch(`/api/job/${pending}`).then(r => r.json()).then(j => {
+    if (j.error && !j.status) { localStorage.removeItem(LAST_JOB); return; }
+    if (j.status === "done") { show(j.html, j.filename, pending); localStorage.removeItem(LAST_JOB); return; }
+    if (j.status === "error") { fail(j.error); localStorage.removeItem(LAST_JOB); return; }
+    attach(pending);
+  });
+});
+
+function fail(message) {
+  stopPolling();
+  $("status").innerHTML = `<div class="err">${message}</div>`;
+  $("go").disabled = false;
+}
+
+$("again").onclick = () => { localStorage.removeItem(LAST_JOB); location.reload(); };
+</script>
+</body>
+</html>
