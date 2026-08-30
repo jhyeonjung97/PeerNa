@@ -275,6 +275,12 @@ Never carry a precedent comment across as though it were about this manuscript.
 lacks ICP data. If you cannot point to where in this manuscript the gap is, you
 have not established that there is one.
 
+Write every point in your own words. These comments were published under a
+licence that allows them to be reused and requires the source to be credited if
+they are; quoting one into a report about a different paper would make the report
+a republication of someone else's review, which is not what it is. Take the
+expectation, leave the sentence.
+
 Write your findings as prose, and say explicitly which expectations this
 manuscript already satisfies — that is as useful to the author as the gaps.
 """

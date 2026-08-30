@@ -198,8 +198,34 @@ zero retention is available there and not through a router.
 - **No remote for this repository.** It used to sit in Drive and be backed up by
   it. `DECISIONS.md` is not reproducible.
 
-## 9. Licensing
+## 9. Licensing — resolved, with one thing to keep doing
 
-The corpus is CC BY, which permits commercial use with attribution, but the
-referee reports are the substance and were written by people who did not consent
-to that. Selling this as a service needs a real answer. Not urgent while private.
+The worry recorded here was that the corpus is CC BY but the referee reports are
+the substance, and their authors had not consented to a commercial product.
+
+The premise was wrong, and one query settled it. **787 of 800 review files carry
+their own licence**, and it is not inherited from the paper:
+
+> Open Access **This Peer Review File** is licensed under a Creative Commons
+> Attribution 4.0 International License, which permits use, sharing, adaptation,
+> distribution and reproduction in any medium or format, as long as you give
+> appropriate credit to the original author(s) and the source…
+
+Nature Communications transparent peer review is opt-in: a report is published
+only if its referee agrees, and that agreement is what puts CC BY on it.
+Commercial use is permitted outright. The caution here was invented, not found.
+
+What CC BY does ask for is credit, and that is now given: a review that consulted
+the corpus names the papers it drew on, with DOIs and the licence, in both the
+Markdown and the HTML. The referees are anonymous, so the credit goes to the
+paper and the journal. The precedent pass is also told to take the expectation
+and leave the sentence — quoting a comment into a report about a different paper
+would make it a republication, which needs more than a footnote.
+
+**The thing to keep doing:** if the output ever reproduces a referee's wording
+rather than paraphrasing it, the attribution obligation changes shape. Worth
+checking whenever the precedent prompt is edited.
+
+13 of 800 files carry no licence line. Left in the index — same journal, same
+opt-in system, and the missing line is a formatting difference rather than a
+different agreement.

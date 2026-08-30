@@ -200,8 +200,12 @@ class Reviewer:
             for c in n.comments[: max(1, budget // len(neighbours))]:
                 lines.append(f"- {c[:600]}")
                 budget -= 1
-        self.notes["precedent_sources"] = ", ".join(
-            f"{n.title[:60]} ({n.similarity:.2f})" for n in neighbours
+        # Kept as DOI and title so the report can credit them. The referee
+        # reports these came from are published under CC BY 4.0, which permits
+        # exactly this use and asks for the source in return. The referees are
+        # anonymous, so the source is the paper and the journal.
+        self.notes["precedent_sources"] = "\n".join(
+            f"10.1038/{n.slug} — {n.title[:110]}" for n in neighbours
         )
         return self.backend.run_text(
             self.system,
