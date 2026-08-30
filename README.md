@@ -227,3 +227,18 @@ is automatic and prefix-based with no lifetime control, so the manuscript is
 placed first in the request to give the prefix the best chance of matching, and
 that is the most that can be done. This is why the Luna cost estimate carries a
 caveat the others do not.
+
+
+## Where things live
+
+The code is here; the data is not, because the data is 1.2 GB and does not
+belong in a git repository.
+
+    ~/bin/PeerNa                       this repository — the package, tools, notes
+    ~/.config/ai-peer-reviewer/.env    API keys, never in the project folder
+    ~/.cache/ai-peer-reviewer/         the corpus index and embeddings, rebuilt on demand
+    ~/Google Drive/…/AI Peer Reviewer/ corpus PDFs and finished reports
+
+Nothing in the package reads the Drive folder — the index it searches lives in
+`~/.cache`, built by `peerna-harvest`. Only the benchmark scripts open the corpus
+PDFs directly, and they hold the path themselves.
