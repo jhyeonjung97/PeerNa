@@ -52,6 +52,13 @@ legend { font-size: .74rem; text-transform: uppercase; letter-spacing: .09em; co
 #siDrop.loaded { border-style: solid; border-color: var(--ok); text-align: left; }
 #siDrop .hint { font-size: .82rem; margin-top: .2rem; }
 #siDrop input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+
+#caution {
+  margin: 0 0 .8rem; padding: .6rem .85rem; border-radius: 6px;
+  background: color-mix(in srgb, var(--alarm) 8%, transparent);
+  border-left: 3px solid var(--alarm);
+  font-size: .88rem; line-height: 1.5;
+}
 #fileName { font-weight: 600; }
 input[type=file] { display: none; }
 
@@ -235,6 +242,7 @@ iframe { width: 100%; height: 70vh; border: 1px solid var(--rule); border-radius
 
     <fieldset>
       <legend>Settings</legend>
+      <div id="caution" hidden></div>
       <div class="row">
         <label>Model <select id="model"></select></label>
       </div>
@@ -309,10 +317,11 @@ function loadModels(keep) {
       o.value = m.key;
       o.textContent = `${m.label}${m.ready ? "" : "  (no API key)"}`;
       o.disabled = !m.ready;
-      o.title = m.note;
+      o.title = m.caution ? `${m.note}\n\n${m.caution}` : m.note;
       if (m.key === want) o.selected = true;
       $("model").append(o);
     }
+    showCaution();
     if ($("model").selectedIndex < 0) {
       const first = d.models.find(m => m.ready);
       if (first) $("model").value = first.key;
@@ -528,7 +537,16 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && !$("keyPanel").hidden) closeKeys();
 });
 
-$("model").onchange = estimate;
+// A caution about where the manuscript goes belongs next to the choice that
+// sends it, not in a tooltip nobody hovers over.
+function showCaution() {
+  const chosen = (MODELS || []).find(m => m.key === $("model").value);
+  const box = $("caution");
+  box.textContent = chosen?.caution || "";
+  box.hidden = !chosen?.caution;
+}
+
+$("model").onchange = () => { showCaution(); estimate(); };
 function gate() {
   $("go").disabled = !upload;
 }

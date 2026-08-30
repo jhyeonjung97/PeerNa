@@ -96,6 +96,17 @@ def main(argv: list[str] | None = None) -> int:
     )
     manuscript = loader.load(args.manuscript, spec)
 
+    problem = models.retention_problem(spec, config.zero_retention())
+    if problem:
+        print(f"NOTE: {problem}\n", file=sys.stderr)
+    if not args.no_web_search:
+        print(
+            "NOTE: web search is on. Search queries leave for a search engine and "
+            "are logged there,\n      which no data-retention agreement covers. The "
+            "literature pass is told to search\n      in its own words and never to "
+            "quote the manuscript; use --no-web-search to be certain.\n",
+            file=sys.stderr,
+        )
     print(f"Manuscript : {manuscript.name}", file=sys.stderr)
     print(f"Model      : {spec.label}", file=sys.stderr)
     if spec.requires_data_retention:

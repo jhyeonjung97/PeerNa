@@ -374,6 +374,9 @@ class Handler(BaseHTTPRequestHandler):
                             "label": models.REGISTRY[name].label,
                             "provider": models.REGISTRY[name].provider,
                             "note": models.QUALITY_NOTE[name],
+                            "caution": models.retention_problem(
+                                models.REGISTRY[name], config.zero_retention()
+                            ),
                             "ready": config.has_credentials(
                                 models.REGISTRY[name].provider
                             ),

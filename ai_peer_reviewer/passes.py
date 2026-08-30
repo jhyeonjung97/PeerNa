@@ -142,6 +142,16 @@ new, then look for work that already did it:
 - Search the literature for the specific combination the paper claims. Not the
   general topic — the actual claim. "Re-doped RuO2 for acidic OER" rather than
   "oxygen evolution catalysts".
+- **Search in your own words, never the manuscript's.** This paper is
+  unpublished and under review. A search query leaves here and is logged by a
+  search engine, so anything you paste into one has left the confidential
+  channel — and a distinctive sentence from an unpublished manuscript is exactly
+  what should not. Never put into a query: a sentence or phrase copied from the
+  manuscript, its title, its exact measured values, the names of its samples or
+  materials as it names them, or the authors' names. Search for the *concepts*,
+  described the way the field would describe them to someone who had not read
+  this paper. If a claim cannot be searched for without quoting the manuscript,
+  do not search for it — say you could not verify it instead.
 - Read the paper's own bibliography with the same question in mind. The closest
   prior work is very often something the authors already cite, sometimes without
   noticing how much of their claim it covers.

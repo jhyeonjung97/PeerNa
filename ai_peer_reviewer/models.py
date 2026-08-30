@@ -50,8 +50,10 @@ class ModelSpec:
     #: Model to fall back to if a request is refused by a safety classifier.
     fallback_model: str | None = None
 
-    #: Models that cannot run under zero data retention. Worth surfacing for a
-    #: tool that handles unpublished manuscripts.
+    #: Models that cannot run under zero data retention — the provider keeps the
+    #: request whatever the account's agreement says. Declared here since 2025
+    #: and never once shown to anyone, which made it a comment rather than a
+    #: safeguard. `retention_problem` is what reads it.
     requires_data_retention: bool = False
 
     # -- routed models --------------------------------------------------------
@@ -250,3 +252,30 @@ def resolve(name: str) -> ModelSpec:
         raise SystemExit(
             f"Unknown model {name!r}. Choose one of: " + ", ".join(ALIASES)
         ) from None
+
+
+def retention_problem(spec: ModelSpec, zero_retention: bool) -> str | None:
+    """Why this model is a poor fit for the confidentiality the operator claims.
+
+    Returns a sentence to show the user, or None. Two separate things are at
+    stake and only one of them is about retention:
+
+    - A model that keeps requests cannot honour a zero-retention agreement, so
+      choosing one silently would make the claim false.
+    - A routed model puts a second company between the manuscript and the model.
+      Its logging policy is its own, and we have no way to see it.
+    """
+    if zero_retention and spec.requires_data_retention:
+        return (
+            f"{spec.label} cannot run under a zero-retention agreement — the "
+            "provider keeps requests for this model regardless. Choose another "
+            "model for a manuscript under review."
+        )
+    if spec.provider == "monorouter":
+        return (
+            f"{spec.label} is reached through a router, so the manuscript passes "
+            "through a second company before it reaches the model. Its retention "
+            "policy is not ours to see. For a manuscript under review, prefer a "
+            "model on its provider's own endpoint."
+        )
+    return None

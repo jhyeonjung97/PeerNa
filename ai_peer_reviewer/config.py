@@ -21,9 +21,15 @@ OPENAI_KEY_NAME = "OPENAI_API_KEY"
 ROUTER_KEY_NAME = "MONO_ROURTER_API_KEY"
 MODEL_NAME = "AI_PEER_REVIEWER_MODEL"
 
+#: Set when the account has a zero-retention agreement with its provider. The
+#: tool cannot verify this — it is a contract, not a setting — so it is taken on
+#: the operator's word and used to refuse models that cannot run under one.
+ZERO_RETENTION = "AI_PEER_REVIEWER_ZERO_RETENTION"
+
 #: Settings the .env file may set. Anything else in the file is ignored.
 NOTIFY_KEYS = ("AI_PEER_REVIEWER_EMAIL", "SMTP_USER", "SMTP_PASSWORD", "SMTP_HOST")
-RECOGNISED = (KEY_NAME, OPENAI_KEY_NAME, ROUTER_KEY_NAME, MODEL_NAME, *NOTIFY_KEYS)
+RECOGNISED = (KEY_NAME, OPENAI_KEY_NAME, ROUTER_KEY_NAME, MODEL_NAME,
+              ZERO_RETENTION, *NOTIFY_KEYS)
 
 #: Path fragments that mean a directory is synced to somebody's cloud.
 CLOUD_MARKERS = (
@@ -148,3 +154,8 @@ def write_key_template() -> Path:
         )
     CONFIG_ENV.chmod(0o600)
     return CONFIG_ENV
+
+
+def zero_retention() -> bool:
+    """Whether the operator has declared a zero-retention agreement."""
+    return (os.environ.get(ZERO_RETENTION) or "").strip().lower() in ("1", "true", "yes")
