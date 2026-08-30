@@ -29,7 +29,7 @@ from pathlib import Path
 from . import backends, config, loader, models, notify
 from .passes import PASSES, system_prompt
 from .render import render, render_html
-from .review import Reviewer
+from .review import Reviewer, total_steps
 
 WEB_ROOT = Path(__file__).parent / "web"
 MAX_UPLOAD_BYTES = 40 * 1024 * 1024
@@ -68,6 +68,11 @@ def _load_persisted(job_id: str) -> dict | None:
         return None
 
 
+#: Roughly what the consistency checks add, measured end to end on a paper with
+#: 46 references. Almost independent of manuscript length.
+CHECK_SECONDS = 90
+
+
 def estimated_seconds(tokens: int, web_search: bool) -> int | None:
     """How long this will take, learned from runs that already happened.
 
@@ -87,9 +92,10 @@ def estimated_seconds(tokens: int, web_search: bool) -> int | None:
     if len(similar) >= 2:
         return int(statistics.median(similar))
     # Fallback rate, measured on a 27-page manuscript: ~6 ms per input token
-    # plus fixed overhead. Deliberately crude — it is replaced by real data
-    # after a couple of runs.
-    rough = 30 + tokens * 0.006
+    # plus fixed overhead, and a further 90 seconds for the consistency checks,
+    # which are a network call per reference and two model calls and so barely
+    # depend on the length of the paper.
+    rough = 30 + CHECK_SECONDS + tokens * 0.006
     return int(rough if web_search else rough * 0.75)
 
 
@@ -282,7 +288,7 @@ def _run_review(job_id: str, path: Path, spec, web_search: bool,
         # and has to be skipped.
         reviewer.supplementary = supplementary
 
-        total = len(PASSES) + 1
+        total = total_steps()
 
         def progress(step: int, of: int, title: str) -> None:
             _update(job_id, step=step, total=of, stage=title)
@@ -500,13 +506,23 @@ class Handler(BaseHTTPRequestHandler):
             backend = backends.build(spec)
             tokens = backend.count_input_tokens(system_prompt(), manuscript.parts)
 
-            calls = len(PASSES) + 1
+            # Calls that carry the manuscript and calls that do not are priced
+            # separately. The lenses, the field check and the synthesis all send
+            # the paper; the cutting pass and the two verification calls send
+            # only text they were handed, so charging them a manuscript each —
+            # which the old estimate did by counting calls alone — overstated
+            # the total by more than the checks actually cost.
+            heavy = len(PASSES) + 2          # lenses, field expectations, synthesis
+            light = 3                        # cutting, cross-references, citations
             rate = spec.input_per_mtok / 1_000_000
+            out_rate = spec.output_per_mtok / 1_000_000
             estimate = (
-                tokens * 1.25 * rate
-                + tokens * (calls - 1) * 0.1 * rate
-                + 4_000 * calls * spec.output_per_mtok / 1_000_000
+                tokens * 1.25 * rate                     # first read, uncached
+                + tokens * (heavy - 1) * 0.1 * rate      # the rest, from cache
+                + 8_000 * light * rate                   # a report, not a paper
+                + 4_000 * (heavy + light) * out_rate
             )
+            calls = heavy + light
             self._json(
                 200,
                 {
@@ -556,7 +572,7 @@ class Handler(BaseHTTPRequestHandler):
                 JOBS[job_id] = {
                     "status": "queued",
                     "step": 0,
-                    "total": len(PASSES) + 1,
+                    "total": total_steps(),
                     "stage": "Queued",
                     "filename": filename,
                     "started_at": time.time(),

@@ -6,6 +6,7 @@ backend decides how to ask it.
 
 from __future__ import annotations
 
+import json
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
@@ -66,6 +67,21 @@ CONCURRENCY = 2
 #: draws that do not help.
 CONDENSE_ATTEMPTS = 2
 CONDENSE_TARGET_WORDS = 45  # the corpus median is 42
+
+#: What a review does after the lenses, in order. Named here rather than counted
+#: at each call site: the count was written out in two places and they had
+#: drifted apart, so the progress bar in the browser stopped short of the end of
+#: every run. Adding a stage now means adding it here and nowhere else.
+LATER_STAGES = (
+    "Checking consistency",
+    "Field expectations",
+    "Consolidating",
+    "Cutting it down",
+)
+
+
+def total_steps() -> int:
+    return len(PASSES) + len(LATER_STAGES)
 
 
 def _median_words(report: RefereeReport) -> float:
@@ -215,7 +231,7 @@ class Reviewer:
             RefereeReport,
         )
 
-    def check_consistency(self, manuscript: Manuscript) -> None:
+    def check_consistency(self, manuscript: Manuscript, announce=None) -> None:
         """Everything that can be verified rather than judged.
 
         Three kinds, cheapest first: the manuscript against itself, the
@@ -232,21 +248,44 @@ class Reviewer:
             return
         from . import checks
 
+        # Stored as JSON rather than as the joined text, so that "ran and found
+        # nothing" survives a resume. Saved as text it would be an empty string,
+        # which the checkpoint treats as absent, and ninety seconds of network
+        # calls would be repeated to reach the same silence.
+        if self.checkpoint:
+            saved = self.checkpoint.load("mechanical")
+            if saved is not None:
+                lines = json.loads(saved)
+                if lines:
+                    self.notes["mechanical"] = "\n".join(f"- {l}" for l in lines)
+                self.reused.append("Consistency checks")
+                return
+
         found: list[str] = []
-        for label, work in (
-            ("consistency checks", lambda: checks.run(manuscript.path, self.supplementary)),
-            ("bibliography lookup", lambda: checks.check_bibliography(manuscript.path)),
+        for label, said, work in (
+            ("consistency checks", "Checking figures and numbering",
+             lambda: checks.run(manuscript.path, self.supplementary)),
+            ("bibliography lookup", "Looking up every reference",
+             lambda: checks.check_bibliography(manuscript.path)),
         ):
+            # Resolving a bibliography is one network call per reference and can
+            # run past a minute. Saying which part is in flight is the difference
+            # between a slow step and an apparent hang.
+            if announce:
+                announce(said)
             try:
                 found += [f.detail for f in work()]
             except Exception as exc:  # noqa: BLE001 - see the docstring
                 self.backend.note(f"Could not run the {label} ({exc}).")
 
-        found += self._verify_pairs(manuscript)
+        found += self._verify_pairs(manuscript, announce)
+        found = list(dict.fromkeys(found))
+        if self.checkpoint:
+            self.checkpoint.save("mechanical", json.dumps(found))
         if found:
-            self.notes["mechanical"] = "\n".join(f"- {line}" for line in dict.fromkeys(found))
+            self.notes["mechanical"] = "\n".join(f"- {line}" for line in found)
 
-    def _verify_pairs(self, manuscript: Manuscript) -> list[str]:
+    def _verify_pairs(self, manuscript: Manuscript, announce=None) -> list[str]:
         """Check every cross-reference and citation against what it points at."""
         from . import checks
 
@@ -254,6 +293,7 @@ class Reviewer:
         jobs = (
             (
                 "cross-references",
+                "Checking cross-references",
                 CROSS_REFERENCE_INSTRUCTION,
                 lambda: checks.claims(manuscript.path),
                 lambda c: f"[{c.target}]\n  sentence: {c.sentence}\n"
@@ -263,6 +303,7 @@ class Reviewer:
             ),
             (
                 "citations",
+                "Checking citations",
                 CITATION_INSTRUCTION,
                 lambda: checks.citations(manuscript.path),
                 lambda c: f"[ref {c.number}] {c.title}\n  sentence: {c.sentence}\n"
@@ -270,7 +311,9 @@ class Reviewer:
                 "Reference {t} may not support what it is cited for. {w}",
             ),
         )
-        for label, instruction, gather, render, template in jobs:
+        for label, said, instruction, gather, render, template in jobs:
+            if announce:
+                announce(said)
             try:
                 pairs = gather()
                 if not pairs:
@@ -288,6 +331,23 @@ class Reviewer:
             except Exception as exc:  # noqa: BLE001 - see check_consistency
                 self.backend.note(f"Could not verify {label} ({exc}).")
         return out
+
+    def _resume_stage(self, key: str) -> "RefereeReport | None":
+        if not self.checkpoint:
+            return None
+        saved = self.checkpoint.load(key)
+        if not saved:
+            return None
+        try:
+            return RefereeReport.model_validate_json(saved)
+        except Exception:
+            # A report written by an older schema is not worth migrating; the
+            # stage simply runs again.
+            return None
+
+    def _save_stage(self, key: str, report: RefereeReport) -> None:
+        if self.checkpoint:
+            self.checkpoint.save(key, report.model_dump_json())
 
     def decide(self, report: RefereeReport) -> RefereeReport:
         """Settle the recommendation on its own, against the finished list.
@@ -390,7 +450,7 @@ class Reviewer:
         now rather than a single current step — a counter alone would suggest a
         sequence that is not happening.
         """
-        total = len(PASSES) + 3  # the lenses, the field check, consolidation, cutting
+        total = total_steps()
         done = 0
         running: list[str] = []
 
@@ -420,13 +480,16 @@ class Reviewer:
             for future in [pool.submit(one, p) for p in PASSES]:
                 future.result()  # re-raises whatever a pass raised
 
-        # Cheap, local and independent of everything else, so it runs before the
-        # paid work rather than after: if the PDF cannot be parsed we would
-        # rather know now.
-        self.check_consistency(manuscript)
+        # Independent of everything else, so it runs before the expensive half:
+        # if the PDF cannot be parsed we would rather know now.
+        self.check_consistency(
+            manuscript,
+            announce=(lambda said: progress(len(PASSES), total, said)) if progress else None,
+        )
+        done = len(PASSES) + 1
 
         if progress:
-            progress(len(PASSES), total, "Field expectations")
+            progress(done, total, "Field expectations")
         self.backend.pace()
         precedent = ""
         if self.checkpoint:
@@ -438,15 +501,30 @@ class Reviewer:
         if precedent:
             self.notes["precedent"] = precedent
 
-        if progress:
-            progress(total - 1, total, "Consolidating")
-        self.backend.pace()
-        report = self.synthesise(manuscript)
+        # Synthesis and the cutting pass are checkpointed separately. They are
+        # the last two stages and between them the most expensive, so an
+        # interruption here used to throw away the half of the run least likely
+        # to be reached again cheaply.
+        report = self._resume_stage("draft")
+        if report is None:
+            if progress:
+                progress(done + 1, total, "Consolidating")
+            self.backend.pace()
+            report = self.synthesise(manuscript)
+            self._save_stage("draft", report)
+        else:
+            self.reused.append("Consolidation")
 
-        if progress:
-            progress(total, total, "Cutting it down")
-        self.backend.pace()
-        report = self.condense(report)
+        shorter = self._resume_stage("report")
+        if shorter is None:
+            if progress:
+                progress(total, total, "Cutting it down")
+            self.backend.pace()
+            shorter = self.condense(report)
+            self._save_stage("report", shorter)
+        else:
+            self.reused.append("Cutting")
+        report = shorter
 
         usage = self.backend.usage
         if self.checkpoint:

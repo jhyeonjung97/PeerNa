@@ -33,6 +33,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("manuscript", type=Path, help="PDF, DOCX, LaTeX, or plain text")
     parser.add_argument(
+        "--supplementary", type=Path, metavar="PDF",
+        help="Supplementary information. Not sent to the model — it is usually "
+             "larger than the paper and mostly data the lenses have no use for. "
+             "It is read by the consistency checks, which is where it earns its "
+             "place: without it every 'Supplementary Fig. N' in the manuscript "
+             "goes unverified.",
+    )
+    parser.add_argument(
         "--model",
         default=None,
         help=f"Model to review with (default: {models.DEFAULT_MODEL}, or "
@@ -79,6 +87,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if not args.manuscript.is_file():
         raise SystemExit(f"No such file: {args.manuscript}")
+    if args.supplementary and not args.supplementary.is_file():
+        raise SystemExit(f"No such file: {args.supplementary}")
 
     config.load()
     spec = models.resolve(
@@ -151,6 +161,7 @@ def main(argv: list[str] | None = None) -> int:
         use_web_search=not args.no_web_search,
         checkpoint=resume,
     )
+    reviewer.supplementary = args.supplementary
 
     print(file=sys.stderr)
 
