@@ -182,7 +182,22 @@ who should have been let in.
 Key the account record on the verified address so a Google account can later
 attach to an existing one rather than starting a fresh free tier.
 
-## 7. Smaller things
+## 7. Switch off the router
+
+`MONO_ROURTER_API_KEY` expires at the end of August 2026 and is the default only
+because it has credit while the direct accounts do not. When it goes:
+
+- Set `AI_PEER_REVIEWER_MODEL=luna` and top up OpenAI.
+- Add `ANTHROPIC_API_KEY` if the Claude models are wanted — `opus` and `sonnet`
+  on the direct path, which is also the only way to compare architecture against
+  model without the router's caveats.
+- The `r-` entries can stay in the registry; they cost nothing while unused and
+  document what a routed provider takes away.
+
+The direct path is the better home regardless: one company instead of two, and
+zero retention is available there and not through a router.
+
+## 8. Smaller things
 
 - **Citation content coverage.** The abstract check reaches about 7 of 46
   references on a real paper — the rest have no abstract in Crossref (Nature
@@ -197,7 +212,7 @@ attach to an existing one rather than starting a fresh free tier.
 - **No remote for this repository.** It used to sit in Drive and be backed up by
   it. `DECISIONS.md` is not reproducible.
 
-## 8. Licensing
+## 9. Licensing
 
 The corpus is CC BY, which permits commercial use with attribution, but the
 referee reports are the substance and were written by people who did not consent

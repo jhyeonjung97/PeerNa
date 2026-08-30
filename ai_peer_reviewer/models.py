@@ -171,6 +171,12 @@ LUNA = ModelSpec(
 #
 # Prices are the upstream list prices. The router's own margin is unknown, so
 # treat every cost this reports as a floor.
+#
+# **Temporary.** The account behind MONO_ROURTER_API_KEY expires at the end of
+# August 2026. It is the default while it has credit and the direct accounts do
+# not; after that the `r-` models stop working and the default returns to `luna`
+# on OpenAI's own endpoint — which is the better home for a manuscript anyway,
+# since it removes a company from the path and can run under zero retention.
 # --------------------------------------------------------------------------
 
 MONOROUTER_URL = "https://monogpt.kr/api/monorouter/v1/"
