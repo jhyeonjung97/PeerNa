@@ -479,7 +479,10 @@ paper in two draws a false one, and is asked to look each up and stay silent
 about the ones that do not hold. Residual noise costs a dropped comment rather
 than a wrong accusation in a referee report.
 
-## Four experiments, and what each one could not answer
+## Four experiments that found nothing, and why
+
+Superseded by the ten-paper ablation recorded further down; kept because
+the reasons each one failed are the useful part.
 
 Every comparison below ran with **web search disabled on both arms**
 (`use_web_search=False`), and the one-shot arm has no tools at all. Nothing here
@@ -524,7 +527,7 @@ concerns (raised by two or more referees): both 12/12, at mean position 6.7 and
 both spend far more on flow-cell and technoeconomic questions than the real
 referees did. PeerNa does not fix this.
 
-### 4. Ablation, three papers — the first daylight
+### 4. Ablation, three papers — the first daylight (superseded by the ten-paper run below)
 
 Adding the cutting pass to the one-shot arm isolates the passes from the pass
 that was known to work. PeerNa 11/27 against 7/27, preference 3/3, p=0.29.
@@ -645,3 +648,73 @@ comment length dramatically (median 84 → 44), which is what made it look like 
 general remedy. It works when the two jobs genuinely compete for the model's
 attention. Here they did not: the verdict already followed from the comments, and
 giving it its own call changed nothing because nothing was being crowded out.
+
+## The ablation that settled it — ten papers, checks not yet wired
+
+This is the baseline for everything that follows, taken **before** `checks.py`
+was wired into the review. Ten published papers, 79 defects planted as short
+in-line substitutions, web search on for both arms, scored blind against the
+answer sheet.
+
+| | defects caught | comments | median | cost | time |
+|---|---|---|---|---|---|
+| full pipeline | **31 / 79 (39%)** | 180 | 54 w | $1.10 | 71 min |
+| one pass + cutting | 16 / 79 (20%) | 163 | 52 w | $0.40 | 25 min |
+
+McNemar on the 19 discordant defects: 17 to 2, **p = 0.001**. Nine of ten papers
+went to the full pipeline; the one that did not (`58297-1`) was 1 against 2 on a
+paper where both arms found almost nothing.
+
+### Where the difference is
+
+| defect kind | planted | full | one pass |
+|---|---|---|---|
+| number conflict | 26 | 13 | 9 |
+| wrong cross-reference | 20 | 5 | 1 |
+| wrong unit | 16 | 7 | 1 |
+| overstated claim | 9 | 5 | 5 |
+| reference mismatch | 8 | 1 | 0 |
+
+**Overstated claims are level.** One sentence settles those, and one reading
+finds them. Every point of the gap is in defects that need two distant places in
+the paper compared — a number against the number it contradicts, a unit against
+the quantity it belongs to, a reference against the caption it names. That is
+what reading four times buys, and it is a narrower claim than "better reviews".
+
+Both arms still missed 46 of 79. Winning is not the same as doing well.
+
+### Why the three earlier comparisons found nothing
+
+Not because the effect was absent. Because they were built wrong, in two ways
+that each hid it:
+
+- **The control had no cutting pass.** Comparing the full pipeline against a bare
+  single prompt tangles the cutting pass's effect with the passes'. The cutting
+  pass was known to work, so it flattered the control's *shape* while the passes'
+  contribution to *findings* stayed invisible. Adding it to both arms is what
+  isolated the question.
+- **Web search was off.** With it off the literature pass is explicitly gagged —
+  told not to assert what it could not verify — so PeerNa was fighting with three
+  passes, and the missing one is the only one doing work a single prompt never
+  attempts.
+
+Both were pointed out by Hyeonjung, not found by measurement.
+
+### Two metrics that measured nothing
+
+Reported alongside the result at first, and both are artefacts:
+
+**Preference, 9 to 1.** Asked in the same call as the defect scoring, after it,
+with the planted list in the prompt. Nine of the ten stated reasons cite the
+defect count — *"Report A catches four planted defects, whereas B catches only
+the barrier discrepancy"*. It is the defect result counted a second time. To ask
+it honestly the reports have to go out in their own call with no answer sheet.
+
+**Unplanted real problems, 174 to 159.** The judge accepted 97% and 98% of all
+comments; six of ten papers scored 100%. The absolute numbers differ because the
+full pipeline writes more comments, not better ones. "Is this a real problem" is
+almost always yes for a review comment — the question worth asking is whether it
+is an *important* one, and this did not ask it.
+
+So one result, not three. The defect count is the only one with an answer key
+that does not depend on the judge's taste.
