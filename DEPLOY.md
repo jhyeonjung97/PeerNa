@@ -19,6 +19,16 @@ invocations. Moving to Vercel means Redis for the jobs, blob storage for the
 files, somewhere to host the 381 MB corpus index, and a worker that is not a
 Vercel function — at which point a container is running anyway.
 
+## The address
+
+`peerna.onrender.com`, from the service name in `render.yaml`. Render's
+subdomains are global, so if someone has taken `peerna` it will append a suffix —
+rename the service and the URL follows.
+
+No custom domain for now. It is not a blocker for a private trial or for handing
+the tool to a few people, and a domain can be pointed at the same service later
+without changing anything here.
+
 ## First deploy
 
 1. Push to GitHub. In Render, **New → Blueprint**, point it at the repository;
@@ -26,6 +36,11 @@ Vercel function — at which point a container is running anyway.
 2. Set `OPENAI_API_KEY` in the Render dashboard. It is `sync: false` in the
    blueprint, so it never enters the repository or a build log.
 3. Wait for the first build. Around five minutes, most of it numpy and PyMuPDF.
+
+While `MONO_ROURTER_API_KEY` still has credit and the OpenAI account does not,
+set that instead and `AI_PEER_REVIEWER_MODEL=r-luna`. It expires at the end of
+August 2026 — see `TODO.md` §7 for the switch back, which is also the better
+home for a manuscript.
 
 The service starts with no corpus index. That is fine — the precedent pass is
 skipped when there is no index and the review is complete without it, just
