@@ -168,20 +168,30 @@ who should have been let in.
 Key the account record on the verified address so a Google account can later
 attach to an existing one rather than starting a fresh free tier.
 
-## 7. Switch off the router
+## 7. Switch off the router — automatic, then check
 
-`MONO_ROURTER_API_KEY` expires at the end of August 2026 and is the default only
-because it has credit while the direct accounts do not. When it goes:
+`MONO_ROURTER_API_KEY` runs out at the end of August 2026, Korean time.
+`models.preferred()` turns every `r-` model into its direct equivalent from
+2026-08-31 15:00 UTC, which is midnight on the 1st in Seoul. Both the web form
+and the CLI go through it, so nothing needs changing at the moment it happens.
 
-- Set `AI_PEER_REVIEWER_MODEL=luna` and top up OpenAI.
-- Add `ANTHROPIC_API_KEY` if the Claude models are wanted — `opus` and `sonnet`
-  on the direct path, which is also the only way to compare architecture against
-  model without the router's caveats.
-- The `r-` entries can stay in the registry; they cost nothing while unused and
-  document what a routed provider takes away.
+A date rather than a health check, because the failure cannot be detected any
+other way: an expired key is still a key, and only spending a request finds out.
+The date is known, so it is used.
 
-The direct path is the better home regardless: one company instead of two, and
-zero retention is available there and not through a router.
+**What to check on the 1st:**
+
+- A review actually completes on `luna`. That needs credit on the OpenAI
+  account, which had none as of the 30th.
+- `ANTHROPIC_API_KEY` is set on Render if the Claude models are wanted. They are
+  the only way to compare architecture against model without the router's
+  caveats.
+- The routed entries can stay in the registry. They cost nothing unused and
+  document what a middleman takes away.
+
+The direct path is where this was always going: one company between the
+manuscript and the model instead of two, and the only path that can run under a
+zero-retention agreement.
 
 ## 8. Smaller things
 

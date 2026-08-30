@@ -8,6 +8,7 @@ matters is declared here once and the request builders read from the spec.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 
 
 @dataclass(frozen=True)
@@ -249,6 +250,39 @@ CREDENTIAL_ENV = {
     "openai": "OPENAI_API_KEY",
     "monorouter": "MONO_ROURTER_API_KEY",
 }
+
+
+#: When the routed account's credit runs out, in UTC. The account is Korean and
+#: expires at the end of August 2026 local time, which is 15:00 UTC on the 31st.
+ROUTER_EXPIRES = datetime(2026, 8, 31, 15, 0, tzinfo=timezone.utc)
+
+#: What each routed model becomes once the router is gone. Same model where the
+#: direct path has it; Luna's own endpoint for Luna.
+DIRECT_EQUIVALENT = {
+    "r-luna": "luna",
+    "r-opus": "opus",
+    "r-sonnet": "sonnet",
+    "r-haiku": "haiku",
+}
+
+
+def preferred(name: str, now: "datetime | None" = None) -> str:
+    """The model to actually use, which is not always the one configured.
+
+    A date rather than a health check, because the failure this guards against
+    cannot be detected any other way: an expired key is still a key, so nothing
+    short of spending a request tells you it has stopped working. The date is
+    known in advance, so it is used.
+
+    The direct path is where this was always going. It puts one company between
+    the manuscript and the model instead of two, and it is the only path that can
+    run under a zero-retention agreement.
+    """
+    if name not in DIRECT_EQUIVALENT:
+        return name
+    if (now or datetime.now(timezone.utc)) < ROUTER_EXPIRES:
+        return name
+    return DIRECT_EQUIVALENT[name]
 
 
 def resolve(name: str) -> ModelSpec:

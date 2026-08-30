@@ -91,9 +91,9 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit(f"No such file: {args.supplementary}")
 
     config.load()
-    spec = models.resolve(
+    spec = models.resolve(models.preferred(
         args.model or config.configured_model() or models.DEFAULT_MODEL
-    )
+    ))
     manuscript = loader.load(args.manuscript, spec)
 
     problem = models.retention_problem(spec, config.zero_retention())

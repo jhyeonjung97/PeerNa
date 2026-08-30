@@ -27,7 +27,7 @@ import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from . import backends, config, loader, models, notify
+from . import backends, checkpoint as checkpoint_mod, config, loader, models, notify
 from .passes import PASSES, system_prompt
 from .render import render, render_html
 from .review import Reviewer, total_steps
@@ -281,7 +281,19 @@ def _run_review(job_id: str, path: Path, spec, web_search: bool,
     try:
         manuscript = loader.load(path, spec)
         backend = backends.build(spec)
-        reviewer = Reviewer(backend=backend, mode="referee", use_web_search=web_search)
+
+        # Checkpointed, which matters more here than on the command line. A
+        # deployed service restarts for reasons nobody chose — a new commit, an
+        # environment variable saved, the platform moving the instance — and each
+        # of those kills the worker thread mid-review. mark_orphans() has always
+        # claimed the completed passes were still on disk; they were not, because
+        # this was the one path that never passed a checkpoint. Keyed on the
+        # manuscript, so re-uploading the same file resumes rather than restarts.
+        resume = checkpoint_mod.Checkpoint(
+            checkpoint_mod.run_id(path.read_bytes(), "referee", spec.id)
+        )
+        reviewer = Reviewer(backend=backend, mode="referee",
+                            use_web_search=web_search, checkpoint=resume)
         # The supplementary file is not sent to the model — it is usually larger
         # than the manuscript and most of it is data the passes have no use for.
         # It is read by the consistency checks, which is where it earns its place:
@@ -296,6 +308,8 @@ def _run_review(job_id: str, path: Path, spec, web_search: bool,
 
         _update(job_id, status="running", step=0, total=total, stage="Starting")
         result = reviewer.review(manuscript, progress=progress)
+        if reviewer.reused:
+            _update(job_id, resumed=list(reviewer.reused))
 
         display_name = _job(job_id).get("filename", manuscript.name)
         _update(
@@ -394,6 +408,7 @@ class Handler(BaseHTTPRequestHandler):
                     "models": [
                         {
                             "key": name,
+                            "superseded": models.preferred(name) != name,
                             "label": models.REGISTRY[name].label,
                             "provider": models.REGISTRY[name].provider,
                             "note": models.QUALITY_NOTE[name],
@@ -435,7 +450,8 @@ class Handler(BaseHTTPRequestHandler):
                     for k, v in job.items()
                     if k in ("status", "step", "total", "stage", "error", "cost",
                              "warnings", "html", "started_at", "duration",
-                             "tokens", "web_search", "filename", "supplementary")  # report/markdown
+                             "tokens", "web_search", "filename", "supplementary",
+                             "resumed")  # report/markdown
                              # are large and only needed by the download endpoint
                 },
             )
@@ -520,7 +536,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def _estimate(self, payload: dict) -> None:
         try:
-            spec = models.resolve(payload.get("model") or models.DEFAULT_MODEL)
+            asked = payload.get("model") or config.configured_model() or models.DEFAULT_MODEL
+            spec = models.resolve(models.preferred(asked))
             if not config.has_credentials(spec.provider):
                 env = models.CREDENTIAL_ENV[spec.provider]
                 return self._json(
@@ -568,7 +585,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def _review(self, payload: dict) -> None:
         try:
-            spec = models.resolve(payload.get("model") or models.DEFAULT_MODEL)
+            asked = payload.get("model") or config.configured_model() or models.DEFAULT_MODEL
+            spec = models.resolve(models.preferred(asked))
 
             if not config.has_credentials(spec.provider):
                 env = models.CREDENTIAL_ENV[spec.provider]
