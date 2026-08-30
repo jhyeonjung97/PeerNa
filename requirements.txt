@@ -1,6 +1,7 @@
 anthropic>=1.0
 openai>=3.3
 pydantic>=2.0
+numpy>=1.26        # corpus similarity search
 pymupdf>=1.24
 python-docx>=1.1
 

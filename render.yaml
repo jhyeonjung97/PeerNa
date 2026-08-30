@@ -1,0 +1,30 @@
+# Render builds this on every push to the default branch.
+#
+# A container, not a serverless function: a review runs for minutes (median
+# 425 s, one measured at 2303 s under rate limiting) in a background thread,
+# and a platform that freezes the instance after the response would kill it.
+
+services:
+  - type: web
+    name: peerna
+    runtime: docker
+    plan: starter          # the free plan sleeps when idle, which ends a review in flight
+    healthCheckPath: /
+    autoDeploy: true
+
+    disk:
+      name: peerna-data
+      mountPath: /data     # HOME in the container: index, checkpoints, job history
+      sizeGB: 2            # the corpus index alone is 381 MB
+
+    envVars:
+      # Set the value in the Render dashboard, never here. sync: false keeps it
+      # out of the repository and out of every build log.
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: AI_PEER_REVIEWER_MODEL
+        value: luna
+      # Uncomment only with an agreement actually in place; it refuses the
+      # models that would make the claim false.
+      # - key: AI_PEER_REVIEWER_ZERO_RETENTION
+      #   value: "1"

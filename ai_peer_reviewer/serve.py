@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import base64
 import json
+import os
 import mimetypes
 import statistics
 import subprocess
@@ -648,7 +649,15 @@ def main(argv: list[str] | None = None) -> int:
         prog="ai-peer-review-web",
         description="Serve the manuscript drop-in page on localhost.",
     )
-    parser.add_argument("--port", type=int, default=8765)
+    # A host outside the container cannot reach 127.0.0.1 inside it, and a
+    # platform assigns the port rather than letting the process pick one. Both
+    # default to the safe local values, so nothing changes when run by hand.
+    parser.add_argument("--port", type=int,
+                        default=int(os.environ.get("PORT") or 8765))
+    parser.add_argument("--host", default=os.environ.get("HOST") or "127.0.0.1",
+                        help="0.0.0.0 to accept connections from outside this "
+                             "machine. There is no authentication yet, so only "
+                             "do that where something else is guarding the door.")
     parser.add_argument(
         "--no-browser", action="store_true", help="Do not open a browser window"
     )
@@ -658,8 +667,14 @@ def main(argv: list[str] | None = None) -> int:
 
     ready = [n for n in models.ALIASES if config.has_credentials(models.REGISTRY[n].provider)]
     if not ready:
+        # Named both ways round on purpose. Run by hand the answer is the .env;
+        # run in a container there is no .env and the answer is the platform's
+        # environment, and a message that only mentions the file sends someone
+        # looking for a path that does not exist.
+        wanted = ", ".join(sorted(set(models.CREDENTIAL_ENV.values())))
         raise SystemExit(
-            f"No API credentials found. Put a key in {config.CONFIG_ENV} first."
+            f"No API credentials found. Set one of {wanted} in the environment, "
+            f"or put a key in {config.CONFIG_ENV}."
         )
 
     orphans = mark_orphans()
@@ -667,7 +682,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Marked {orphans} interrupted review(s) from a previous run.")
 
     url = f"http://127.0.0.1:{args.port}/"
-    server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
+    server = ThreadingHTTPServer((args.host, args.port), Handler)
     print(f"AI Peer Reviewer — {url}")
     print(f"Models ready: {', '.join(ready)}")
     print("Ctrl-C to stop.")
