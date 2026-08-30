@@ -69,6 +69,13 @@ def _load_persisted(job_id: str) -> dict | None:
         return None
 
 
+#: Whether this process is serving anyone but the person who started it.
+#: Set from the bind address: 127.0.0.1 can only be reached from this machine,
+#: anything else is on a network. Two things depend on it, and the second is not
+#: cosmetic — a visitor must not be able to replace the operator's credentials.
+HOSTED = False
+
+
 #: Roughly what the consistency checks add, measured end to end on a paper with
 #: 46 references. Almost independent of manuscript length.
 CHECK_SECONDS = 90
@@ -405,6 +412,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(
                 200,
                 {
+                    "hosted": HOSTED,
                     "models": [
                         {
                             "key": name,
@@ -429,6 +437,17 @@ class Handler(BaseHTTPRequestHandler):
             )
 
         if path == "/api/jobs":
+            if HOSTED:
+                # The history is one list for the whole process, and there is no
+                # sign-in to divide it by. Served on a shared deployment it hands
+                # every visitor the filenames of everyone else's manuscripts and
+                # the job ids that fetch their reports — for papers that are, by
+                # the nature of this tool, unpublished and under review.
+                #
+                # A job id is a random 32-hex string, so a review remains
+                # reachable by whoever ran it and holds the link. It is the
+                # listing that leaks, and the listing is what stops.
+                return self._json(200, {"jobs": [], "private": True})
             return self._json(200, {"jobs": _recent_jobs()})
 
         if path.startswith("/api/download/"):
@@ -474,6 +493,15 @@ class Handler(BaseHTTPRequestHandler):
                 200, {"upload_id": _remember(filename, data), "filename": filename}
             )
         if path == "/api/key":
+            if HOSTED:
+                # On a shared deployment this endpoint would let anyone who knows
+                # the address overwrite the key every review is billed to. There
+                # is no sign-in yet, so the only safe answer is no.
+                return self._json(
+                    403,
+                    {"error": "This deployment is shared. Its API key is set by "
+                              "whoever runs it, not from this page."},
+                )
             return self._save_key(payload)
         if path == "/api/estimate":
             return self._estimate(payload)
@@ -722,6 +750,9 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Marked {orphans} interrupted review(s) from a previous run.")
 
     url = f"http://127.0.0.1:{args.port}/"
+    global HOSTED
+    HOSTED = args.host not in ("127.0.0.1", "localhost", "::1")
+
     server = ThreadingHTTPServer((args.host, args.port), Handler)
     print(f"AI Peer Reviewer — {url}")
     print(f"Models ready: {', '.join(ready)}")

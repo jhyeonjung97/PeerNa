@@ -200,7 +200,7 @@ iframe { width: 100%; height: 70vh; border: 1px solid var(--rule); border-radius
     <circle cx="32" cy="32" r="5.2"/>
   </g>
 </svg> PeerNa</h1>
-      <p class="lede">Drop in a manuscript. Runs on your machine, billed to your own API key.</p>
+      <p class="lede" id="lede">Drop in a manuscript.</p>
     </div>
     <button type="button" class="ghost small" id="openKeys">API keys</button>
   </header>
@@ -310,6 +310,13 @@ let MODELS = [];
 function loadModels(keep) {
   return fetch("/api/models").then(r => r.json()).then(d => {
     MODELS = d.models;
+    // Two different programs share this page: one on your own machine spending
+    // your key, one on a server spending somebody else's. Saying which is not a
+    // detail — it decides whether uploading a manuscript is your call alone.
+    $("lede").textContent = d.hosted
+      ? "Drop in a manuscript. Runs on the server that hosts this page, billed to whoever runs it."
+      : "Drop in a manuscript. Runs on your machine, billed to your own API key.";
+    $("openKeys").hidden = !!d.hosted;
     const want = keep || $("model").value || d.default;
     $("model").innerHTML = "";
     for (const m of d.models) {
@@ -679,6 +686,16 @@ function show(html, name, jobId) {
 function loadHistory() {
   fetch("/api/jobs").then(r => r.json()).then(d => {
     const rows = d.jobs || [];
+    if (d.private) {
+      // Nothing is hidden from you that you could otherwise see: the list is
+      // shared by everyone using this deployment, so on a shared one there is
+      // no version of it that is yours.
+      $("history").classList.add("show");
+      $("historyList").innerHTML =
+        '<li class="empty">Recent reviews are not listed on a shared deployment — ' +
+        'the list would be everyone\'s. Keep the link to your report; it stays valid.</li>';
+      return;
+    }
     if (!rows.length) return;
     $("history").classList.add("show");
     $("historyList").innerHTML = rows.map(j => {
