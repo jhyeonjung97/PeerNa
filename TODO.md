@@ -44,41 +44,27 @@ about published papers untouched — correctly, since their comments do name
 unestablished claims — and moves a report whose comments are all presentation
 from major to minor. Wired in as the last stage.
 
-## Implementation gaps
+**Implementation gaps — closed.** Six found by reading the code after the checks
+went in, all fixed: the step count lived in two places and had drifted, so the
+progress bar never reached the end; the checks ran ninety silent seconds and now
+name the part in flight; the CLI takes `--supplementary`; the consistency checks,
+synthesis, cutting and the verdict are each checkpointed; the cost preview prices
+manuscript-carrying calls apart from text-only ones; and `Reviewer.decide` is
+wired.
 
-Found by reading the code after the checks went in, not by hitting them. Each
-one is a real inconsistency between what the tool does and what it says or
-offers.
+A seventh turned up while testing them: `has_credentials` knew two providers by
+name and assumed everything else was Anthropic, so the routed models — the only
+ones with a working key — showed in the browser as unavailable.
 
-1. **The progress bar lies.** `review.py` counts `len(PASSES) + 3` steps;
-   `serve.py` tells the browser `len(PASSES) + 1`. The bar therefore never
-   reaches the end, and now that a review has more stages than it did, it is
-   further off than it was.
-
-2. **The consistency checks are invisible.** They run between the lenses and the
-   field check, take about ninety seconds — a Crossref lookup per reference and
-   two model calls — and report no progress at all. Ninety silent seconds in the
-   middle of a run reads as a hang.
-
-3. **The CLI cannot take supplementary information.** The web form can, since
-   yesterday. Same reviewer underneath, two different sets of capabilities.
-
-4. **Nothing after the lenses is checkpointed.** `precedent` is; synthesis, the
-   cutting pass and the consistency checks are not. A run interrupted after the
-   lenses redoes the expensive half, which is the half most likely to be
-   interrupted, since it comes last.
-
-5. **The cost preview predates the checks.** It counts the lenses and the
-   synthesis. The two verification calls and the Crossref time are not in it, so
-   both the price and the ETA now read low.
-
-6. ~~`Reviewer.decide` is written and unwired.~~ **Wired.** The reason it
-   looked inert was the test: it had only been run on reports about published
-   papers, and every one of those contains a comment saying some central claim
-   is unestablished, which is what major revision means. Given a report whose
-   comments are all presentation — a missing scale bar, an undefined acronym —
-   it moves major revision to minor. There was nothing to change, not nothing
-   it could change.
+**Confidentiality.** `requires_data_retention` had been declared since the
+registry was written and shown to nobody. It now reads through
+`retention_problem()`, which also flags that a routed model puts a second company
+in the path. `AI_PEER_REVIEWER_ZERO_RETENTION` lets an operator declare an
+agreement they hold; what it does is refuse the models that would make the claim
+false. None of this covers web search, so the literature pass is now told to
+search in its own words and never put a sentence, title, measured value, sample
+name or author into a query — and to report a claim unverified rather than quote
+the manuscript to check it.
 
 ## 1. Measure the checks
 
