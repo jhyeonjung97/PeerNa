@@ -590,6 +590,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(
                 200, {"upload_id": _remember(filename, data), "filename": filename}
             )
+        if path == "/api/estimate":
+            return self._estimate(payload)
         if path == "/api/review":
             return self._review(payload)
         self._json(404, {"error": "Not found."})
