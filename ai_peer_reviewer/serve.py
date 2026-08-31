@@ -18,8 +18,10 @@ import os
 import mimetypes
 import statistics
 import subprocess
+import secrets
 import tempfile
 import threading
+from http.cookies import SimpleCookie
 import time
 import urllib.parse
 import uuid
@@ -27,7 +29,7 @@ import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from . import backends, checkpoint as checkpoint_mod, config, loader, models, notify
+from . import auth, backends, checkpoint as checkpoint_mod, config, loader, models, notify
 from .passes import PASSES, system_prompt
 from .render import render, render_html
 from .review import Reviewer, total_steps
@@ -74,6 +76,11 @@ def _load_persisted(job_id: str) -> dict | None:
 #: anything else is on a network. Two things depend on it, and the second is not
 #: cosmetic — a visitor must not be able to replace the operator's credentials.
 HOSTED = False
+
+#: Stands in for a signed-in address when nobody needs to sign in — a local run,
+#: or a deployment with no Google credentials configured. Everything downstream
+#: compares owners, so it needs a value rather than a special case.
+LOCAL_VIEWER = "local"
 
 
 #: Roughly what the consistency checks add, measured end to end on a paper with
@@ -366,6 +373,41 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _viewer(self) -> str | None:
+        """Who is asking, or None when nobody has signed in.
+
+        Always None on a local run: there is one person at the machine and
+        making them sign in to reach their own laptop would be theatre.
+        """
+        if not HOSTED or not auth.configured():
+            return LOCAL_VIEWER
+        cookies = SimpleCookie(self.headers.get("Cookie") or "")
+        morsel = cookies.get(auth.COOKIE)
+        return auth.read(morsel.value if morsel else None)
+
+    def _may_see(self, job: dict) -> bool:
+        """Whether the caller may read this review.
+
+        An unguessable id was the only thing protecting a report before, which
+        held right up until the listing handed the ids out. Ownership is the
+        real answer; the id is now just an address.
+        """
+        if not job:
+            return False
+        viewer = self._viewer()
+        if viewer is None:
+            return False
+        owner = job.get("owner")
+        return owner == viewer or (not HOSTED and not owner)
+
+    def _redirect_uri(self) -> str:
+        host = self.headers.get("Host") or "localhost"
+        # Render terminates TLS in front of the container, so the request that
+        # arrives here is plain HTTP while the address the browser used is not.
+        # Google matches the redirect exactly, so it has to be the outside one.
+        scheme = self.headers.get("X-Forwarded-Proto") or ("https" if HOSTED else "http")
+        return f"{scheme}://{host}/auth/callback"
+
     def _json(self, code: int, payload: dict) -> None:
         self._send(code, json.dumps(payload).encode(), "application/json")
 
@@ -379,6 +421,59 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         path = self.path.split("?", 1)[0]
+
+        if path == "/auth/login":
+            if not auth.configured():
+                return self._json(503, {"error": "Sign-in is not configured."})
+            state = secrets.token_urlsafe(16)
+            self.send_response(302)
+            self.send_header("Location", auth.login_url(self._redirect_uri(), state))
+            # The state is echoed back by Google and compared here, so a link
+            # someone else made cannot complete a sign-in in this browser.
+            self.send_header(
+                "Set-Cookie",
+                f"peerna_state={state}; Path=/; HttpOnly; SameSite=Lax; Max-Age=600"
+                + ("; Secure" if HOSTED else ""),
+            )
+            self.end_headers()
+            return
+
+        if path == "/auth/callback":
+            query = urllib.parse.parse_qs(
+                self.path.split("?", 1)[1] if "?" in self.path else ""
+            )
+            cookies = SimpleCookie(self.headers.get("Cookie") or "")
+            expected = cookies.get("peerna_state")
+            given = query.get("state", [""])[0]
+            if not expected or not secrets.compare_digest(expected.value, given):
+                return self._json(400, {"error": "That sign-in link has expired."})
+            email = auth.exchange(query.get("code", [""])[0], self._redirect_uri())
+            if not email:
+                return self._json(400, {"error": "Google did not confirm that account."})
+            self.send_response(302)
+            self.send_header("Location", "/")
+            self.send_header(
+                "Set-Cookie",
+                f"{auth.COOKIE}={auth.issue(email)}; Path=/; HttpOnly; "
+                f"SameSite=Lax; Max-Age={auth.SESSION_DAYS * 86400}"
+                + ("; Secure" if HOSTED else ""),
+            )
+            self.send_header("Set-Cookie", "peerna_state=; Path=/; Max-Age=0")
+            self.end_headers()
+            return
+
+        if path == "/auth/logout":
+            self.send_response(302)
+            self.send_header("Location", "/")
+            self.send_header("Set-Cookie", f"{auth.COOKIE}=; Path=/; Max-Age=0")
+            self.end_headers()
+            return
+
+        if path == "/api/me":
+            return self._json(200, {
+                "email": self._viewer(),
+                "required": HOSTED and auth.configured(),
+            })
 
         if path == "/healthz":
             # A platform polls this every few seconds to decide whether the
@@ -437,21 +532,21 @@ class Handler(BaseHTTPRequestHandler):
             )
 
         if path == "/api/jobs":
-            if HOSTED:
-                # The history is one list for the whole process, and there is no
-                # sign-in to divide it by. Served on a shared deployment it hands
-                # every visitor the filenames of everyone else's manuscripts and
-                # the job ids that fetch their reports — for papers that are, by
-                # the nature of this tool, unpublished and under review.
-                #
-                # A job id is a random 32-hex string, so a review remains
-                # reachable by whoever ran it and holds the link. It is the
-                # listing that leaks, and the listing is what stops.
-                return self._json(200, {"jobs": [], "private": True})
-            return self._json(200, {"jobs": _recent_jobs()})
+            viewer = self._viewer()
+            if viewer is None:
+                return self._json(200, {"jobs": [], "signedOut": True})
+            # Reviews run before sign-in existed have no owner. On a local run
+            # they are the operator's own and belong in the list; on a shared
+            # one there is no way to tell whose they were, so they stay hidden.
+            return self._json(200, {"jobs": [
+                job for job in _recent_jobs()
+                if job.get("owner") == viewer or (not HOSTED and not job.get("owner"))
+            ]})
 
         if path.startswith("/api/download/"):
             job_id = path.rsplit("/", 1)[-1]
+            if not self._may_see(_job(job_id) or {}):
+                return self._json(404, {"error": "No report for that job."})
             fmt = urllib.parse.parse_qs(
                 self.path.split("?", 1)[1] if "?" in self.path else ""
             ).get("format", ["pdf"])[0]
@@ -460,7 +555,8 @@ class Handler(BaseHTTPRequestHandler):
         if path.startswith("/api/job/"):
             job_id = path.rsplit("/", 1)[-1]
             job = _job(job_id)
-            if not job:
+            if not job or not self._may_see(job):
+                # Not "forbidden": a 403 would confirm the id names something.
                 return self._json(404, {"error": "No such job."})
             return self._json(
                 200,
@@ -470,7 +566,7 @@ class Handler(BaseHTTPRequestHandler):
                     if k in ("status", "step", "total", "stage", "error", "cost",
                              "warnings", "html", "started_at", "duration",
                              "tokens", "web_search", "filename", "supplementary",
-                             "resumed")  # report/markdown
+                             "resumed", "owner")  # report/markdown
                              # are large and only needed by the download endpoint
                 },
             )
@@ -613,6 +709,11 @@ class Handler(BaseHTTPRequestHandler):
 
     def _review(self, payload: dict) -> None:
         try:
+            viewer = self._viewer()
+            if viewer is None:
+                # The one endpoint that spends money. Everything else is either
+                # free or already scoped to what the caller can see.
+                return self._json(401, {"error": "Sign in to run a review."})
             asked = payload.get("model") or config.configured_model() or models.DEFAULT_MODEL
             spec = models.resolve(models.preferred(asked))
 
@@ -650,6 +751,7 @@ class Handler(BaseHTTPRequestHandler):
                     "started_at": time.time(),
                     "web_search": not payload.get("no_web_search"),
                     "supplementary": found[0] if si_path else None,
+                    "owner": viewer,
                 }
 
             try:

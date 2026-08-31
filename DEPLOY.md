@@ -59,6 +59,37 @@ mounted disk, or copy an index you have already built into `/data/.cache/`.
 Without the disk these sit in the image layer and vanish on every deploy, taking
 every review anyone has run with them.
 
+## Sign-in
+
+Off until `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are set; the service
+behaves exactly as before without them. With them, running a review requires a
+Google account, the review history shows only your own, and a report can be
+fetched only by the person who ran it.
+
+Google rather than emailed links, and the reason decided it: a magic link has to
+be delivered, delivery needs a sending service, and a sending service will not
+mail strangers until you have verified a domain you own. Google needs no domain.
+
+In the Google Cloud console:
+
+1. Create a project.
+2. **OAuth consent screen** → External. Leave it in **Testing** and add each
+   person's address under Test users. Testing allows 100, which is more than a
+   trial needs and skips review entirely.
+3. **Credentials → OAuth client ID → Web application.**
+4. Authorized redirect URI: `https://peerna.onrender.com/auth/callback` — exactly,
+   including the scheme.
+5. Put the client ID and secret in Render.
+
+The scopes are `openid email`, both non-sensitive, so nothing here goes near the
+review queue for sensitive scopes. Publishing the app later removes the 100-user
+cap and is the point at which the spending ceiling stops being advice.
+
+Nobody is turned away by email domain. Two limits already bound the damage: the
+testing cap on how many accounts exist at all, and the ceiling on the provider
+account. A domain rule would add a third and exclude the European institutions
+that do not use Google.
+
 ## Before the URL goes to anyone else
 
 **There is no authentication.** Anyone with the address can spend the key. Two

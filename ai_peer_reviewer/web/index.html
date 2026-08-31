@@ -209,6 +209,7 @@ iframe { width: 100%; height: 70vh; border: 1px solid var(--rule); border-radius
       <p class="lede" id="lede">Drop in a manuscript.</p>
     </div>
     <button type="button" class="ghost small" id="openKeys">API keys</button>
+    <span id="account" hidden></span>
   </header>
 
   <p class="notice">
@@ -318,6 +319,26 @@ let etaSeconds = null, startedAt = null, ticker = null;
 // on the server, so reloading reattaches instead of losing the work.
 const LAST_JOB = "aipr.lastJob";
 
+// -- who is signed in -------------------------------------------------------
+function loadAccount() {
+  return fetch("/api/me").then(r => r.json()).then(d => {
+    const box = $("account");
+    box.hidden = false;
+    if (d.email && d.email !== "local") {
+      box.innerHTML = `<span class="who">${d.email}</span> ` +
+        `<a class="ghost small" href="/auth/logout">Sign out</a>`;
+    } else if (d.required) {
+      box.innerHTML = `<a class="ghost small" href="/auth/login">Sign in with Google</a>`;
+    } else {
+      box.hidden = true;
+    }
+    // Nothing here spends money until someone has signed in, so the button that
+    // starts a review says why it is unavailable rather than simply refusing.
+    window.SIGNED_IN = !d.required || (d.email && d.email !== "local");
+    gate();
+  });
+}
+
 // -- model list -------------------------------------------------------------
 let MODELS = [];
 
@@ -353,6 +374,7 @@ function loadModels(keep) {
   });
 }
 loadModels();
+loadAccount();
 
 // -- API keys panel --------------------------------------------------------
 const PROVIDERS = [
@@ -572,7 +594,9 @@ function showCaution() {
 
 $("model").onchange = () => { showCaution(); estimate(); };
 function gate() {
-  $("go").disabled = !upload;
+  const needsSignIn = window.SIGNED_IN === false;
+  $("go").disabled = !upload || needsSignIn;
+  $("go").title = needsSignIn ? "Sign in with Google to run a review." : "";
 }
 
 const body = () => ({
@@ -703,6 +727,12 @@ function show(html, name, jobId) {
 function loadHistory() {
   fetch("/api/jobs").then(r => r.json()).then(d => {
     const rows = d.jobs || [];
+    if (d.signedOut) {
+      $("history").classList.add("show");
+      $("historyList").innerHTML =
+        '<li class="empty">Sign in to see your reviews.</li>';
+      return;
+    }
     if (d.private) {
       // Say what to do, not why. The reason is that the history is one list for
       // the whole server, which is a fact about the inside of this thing and not
