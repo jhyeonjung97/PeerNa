@@ -28,7 +28,22 @@ _LOCK = threading.Lock()
 
 #: Nobody signs in to reach their own laptop, and nobody should be rationed on
 #: it either. The web path uses this same name for an unauthenticated local run.
-EXEMPT = {"local", None, ""}
+LOCAL = {"local", None, ""}
+
+#: Accounts with no limit, comma-separated. The operator's own belongs here:
+#: they are paying for every review on the service and testing it is not a
+#: privilege to be rationed three at a time. Kept in the environment rather than
+#: in the source so that changing who is exempt does not mean a deploy — and so
+#: that a public repository does not carry a list of addresses.
+UNLIMITED = {
+    address.strip().lower()
+    for address in (os.environ.get("AI_PEER_REVIEWER_UNLIMITED") or "").split(",")
+    if address.strip()
+}
+
+
+def exempt(email: str | None) -> bool:
+    return email in LOCAL or (email or "").lower() in UNLIMITED
 
 
 def _read() -> dict[str, int]:
@@ -40,7 +55,7 @@ def _read() -> dict[str, int]:
 
 
 def used(email: str | None) -> int:
-    if email in EXEMPT:
+    if exempt(email):
         return 0
     with _LOCK:
         return _read().get(email, 0)
@@ -48,14 +63,14 @@ def used(email: str | None) -> int:
 
 def remaining(email: str | None) -> int | None:
     """Free reviews left, or None when the account is not rationed."""
-    if email in EXEMPT:
+    if exempt(email):
         return None
     return max(0, FREE_REVIEWS - used(email))
 
 
 def record(email: str | None) -> None:
     """Count one completed review against an account."""
-    if email in EXEMPT:
+    if exempt(email):
         return
     with _LOCK:
         counts = _read()

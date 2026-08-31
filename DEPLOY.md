@@ -127,6 +127,12 @@ Three per Google account, then a 402. `AI_PEER_REVIEWER_FREE_REVIEWS` changes
 the number; the count lives in `/data/.cache/ai-peer-reviewer/quota.json` on the
 mounted disk, so it survives a deploy.
 
+`AI_PEER_REVIEWER_UNLIMITED` takes a comma-separated list of addresses with no
+limit — the operator's own belongs there, since they pay for every review on the
+service and testing it is not a privilege to ration three at a time. In the
+environment rather than the source, so that changing it is not a deploy and a
+public repository carries no list of addresses.
+
 Counted apart from the job history on purpose: that is capped at fifty files and
 sweeps the oldest, so counting finished jobs would hand somebody a fresh
 allowance once enough other people had used the service — the quota would leak

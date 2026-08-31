@@ -26,6 +26,9 @@ services:
         sync: false
       - key: AI_PEER_REVIEWER_MODEL
         value: r-luna
+      # Addresses that are not rationed, comma-separated. Set in the dashboard.
+      - key: AI_PEER_REVIEWER_UNLIMITED
+        sync: false
       # Uncomment only with an agreement actually in place; it refuses the
       # models that would make the claim false.
       # - key: AI_PEER_REVIEWER_ZERO_RETENTION
