@@ -101,9 +101,19 @@ There is one key now and it belongs to whoever runs the service, set in the
 platform's environment. Locally that is the `.env`, and the startup message
 names both the file and the variables when neither is there.
 
-## Before pushing
+## Pushing
 
-    ./tests/run.sh
+    ./tests/deploy.sh
+
+Checks whether a review is running before it pushes, then runs the tests and
+pushes. A deploy replaces the instance and a review runs for minutes in a
+background thread of the old one, so it dies — the checkpoint means the work
+survives and the same manuscript resumes where it stopped, but somebody is
+watching a progress bar that suddenly reports the server stopped. Render's
+shutdown grace period is far shorter than a review, so draining is not an
+option; asking is.
+
+`./tests/run.sh` on its own
 
 Compiles the package, then checks two things that have each shipped broken: a
 name read but never bound, and a path the page calls that the server does not

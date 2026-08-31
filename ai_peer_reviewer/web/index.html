@@ -727,8 +727,15 @@ function loadHistory() {
         'Reviews are not listed here.</li>';
       return;
     }
-    if (!rows.length) return;
+    // Signed in, so the section belongs on the page whether or not anything is
+    // in it yet — hiding it until the first review finishes made it look as
+    // though reviews were not kept at all.
     $("history").classList.add("show");
+    if (!rows.length) {
+      $("historyList").innerHTML =
+        '<li class="empty">Your finished reviews will be listed here.</li>';
+      return;
+    }
     $("historyList").innerHTML = rows.map(j => {
       if (j.status === "running" || j.status === "queued") {
         const since = j.started_at ? j.started_at * 1000 : Date.now();
