@@ -431,13 +431,19 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/auth/login":
             if not auth.configured():
                 return self._json(503, {"error": "Sign-in is not configured."})
+            query = urllib.parse.parse_qs(
+                self.path.split("?", 1)[1] if "?" in self.path else ""
+            )
+            # Agreement is asked for before Google is, not after: sending
+            # somebody to sign in and then telling them the conditions would be
+            # asking them to agree to something they had already started.
+            if not query.get("agreed"):
+                return self._json(400, {"error": "The terms have not been accepted."})
             state = secrets.token_urlsafe(16)
             # Whether to come back into this window or hand the result to the
             # one that opened it. Carried on the state cookie rather than
             # through Google, which would only echo back what it was given.
-            if urllib.parse.parse_qs(
-                self.path.split("?", 1)[1] if "?" in self.path else ""
-            ).get("popup"):
+            if query.get("popup"):
                 state += ".popup"
             self.send_response(302)
             self.send_header("Location", auth.login_url(self._redirect_uri(), state))
@@ -531,6 +537,9 @@ class Handler(BaseHTTPRequestHandler):
 
         if path in ("/", "/index.html"):
             return self._serve_file(WEB_ROOT / "index.html")
+
+        if path in ("/terms", "/terms.html", "/privacy"):
+            return self._serve_file(WEB_ROOT / "terms.html")
 
         if path == "/logo.svg":
             return self._serve_file(WEB_ROOT / "logo.svg")

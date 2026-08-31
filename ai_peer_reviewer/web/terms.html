@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Terms and privacy — PeerNa</title>
+<style>
+:root {
+  color-scheme: light dark;
+  --bg: #fbfaf9; --ink: #1a1815; --muted: #6b6560; --rule: #e3ded8;
+  --accent: #2f5d8a; --alarm: #a02c2c; --alarm-bg: #fdf3f2;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #161513; --ink: #eae6e0; --muted: #9b948c; --rule: #33302b;
+          --accent: #7fa8cf; --alarm: #f08b84; --alarm-bg: #2a1c1b; }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding: 3rem 1.5rem 6rem; background: var(--bg); color: var(--ink);
+  font: 16px/1.7 ui-sans-serif, system-ui, sans-serif;
+}
+main { max-width: 42rem; margin: 0 auto; }
+h1 { font-size: 1.5rem; margin: 0 0 .3rem; }
+h2 { font-size: 1.05rem; margin: 2.6rem 0 .6rem; }
+h3 { font-size: .95rem; margin: 1.6rem 0 .4rem; }
+p, li { margin: 0 0 .8rem; }
+ul { padding-left: 1.2rem; }
+a { color: var(--accent); }
+.updated { color: var(--muted); font-size: .85rem; margin-bottom: 2.5rem; }
+.warn {
+  border-left: 3px solid var(--alarm); background: var(--alarm-bg);
+  padding: .8rem 1rem; border-radius: 0 6px 6px 0; margin: 1.4rem 0;
+}
+table { border-collapse: collapse; width: 100%; margin: .6rem 0 1.4rem; font-size: .92rem; }
+th, td { text-align: left; padding: .45rem .6rem; border-bottom: 1px solid var(--rule); vertical-align: top; }
+th { color: var(--muted); font-weight: 600; font-size: .82rem; }
+.back { display: inline-block; margin-top: 3rem; font-size: .9rem; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Terms and privacy</h1>
+  <p class="updated">PeerNa · last changed 31 August 2026</p>
+
+  <p>
+    PeerNa is run by Hyeonjung Jung
+    (<a href="mailto:jiuy97@stanford.edu">jiuy97@stanford.edu</a>). It reads a
+    manuscript and writes a referee report. This page says what happens to what
+    you upload, and what the report is and is not.
+  </p>
+
+  <h2>What the report is</h2>
+
+  <p>
+    Every comment is written by a language model. Some will be wrong. Some will
+    describe things the manuscript does not say, and some real problems will be
+    missed — in testing against papers with deliberately introduced errors, the
+    tool found about four in ten of them.
+  </p>
+  <p>
+    <strong>Check every comment against the manuscript before acting on one or
+    sending it to anyone.</strong> A report is a draft to work from, not a
+    review to submit.
+  </p>
+
+  <h2>What you may upload</h2>
+
+  <div class="warn">
+    <p style="margin:0">
+      If you are refereeing for a journal, the manuscript is not yours to share.
+      Elsevier, ACS, Springer Nature and NIH among others restrict uploading
+      manuscripts under review to AI tools, and some prohibit it outright. Check
+      the policy of the journal that asked you before uploading anything.
+    </p>
+  </div>
+
+  <p>By uploading, you confirm that you are permitted to.</p>
+
+  <h2>Where a manuscript goes</h2>
+
+  <p>
+    It is sent to this service, and from here to whichever model provider is
+    configured — currently OpenAI, or another provider reached through a router.
+    The provider processes it and, under its own terms, may retain it for a
+    period. This service does not control that.
+  </p>
+  <p>
+    Two smaller things also leave: reference strings from the bibliography go to
+    <a href="https://www.crossref.org">Crossref</a> to check that cited works
+    exist and have not been retracted, and the literature pass may run web
+    searches. That pass is instructed to search in its own words and never to
+    put a sentence, title, measured value, sample name or author from the
+    manuscript into a query. Turning off citation verification stops the
+    searches entirely.
+  </p>
+
+  <h2>What is kept, and for how long</h2>
+
+  <table>
+    <tr><th>What</th><th>Kept</th></tr>
+    <tr><td>The uploaded file</td><td>Deleted when the review finishes</td></tr>
+    <tr><td>The report</td><td>Until pushed out by the fifty most recent reviews</td></tr>
+    <tr><td>Working notes from an interrupted review</td><td>Two days, then deleted</td></tr>
+    <tr><td>Your email address and how many reviews you have run</td><td>Until you ask for it to go</td></tr>
+  </table>
+
+  <p>
+    A finished report is readable only by the account that ran it. Nobody else
+    can list your reviews or open one, including by guessing its address.
+  </p>
+  <p>
+    The operator can read what is on the server's disk. There is no encryption
+    that would prevent that, and claiming otherwise would be untrue.
+  </p>
+
+  <h3>Deleting your data</h3>
+  <p>
+    Write to <a href="mailto:jiuy97@stanford.edu">jiuy97@stanford.edu</a> and
+    everything held for your account will be removed. There is no self-service
+    button for it yet.
+  </p>
+
+  <h2>Signing in</h2>
+  <p>
+    Sign-in goes through Google, which tells this service your email address and
+    nothing else. It is stored in a signed cookie in your browser and used to
+    keep your reviews separate from everyone else's and to count how many you
+    have run.
+  </p>
+
+  <h2>Cost</h2>
+  <p>
+    Three reviews are free per account. Nothing takes payment at present; when
+    the free reviews are gone the page says so.
+  </p>
+
+  <h2>No warranty</h2>
+  <p>
+    The service is provided as it is, without any guarantee that it works, is
+    available, or is correct. It may change or stop at any time. It is a
+    research tool run by one person, not a product with a support contract.
+  </p>
+
+  <a class="back" href="/">← Back to PeerNa</a>
+</main>
+</body>
+</html>
