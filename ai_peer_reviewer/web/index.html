@@ -78,20 +78,12 @@ select { font: inherit; padding: .3rem .5rem; border-radius: 5px; border: 1px so
 .top .lede { margin-bottom: 2rem; }
 button.small { padding: .35rem .8rem; font-size: .85rem; flex: none; }
 
-#keyPanel {
-  position: fixed; inset: 0; background: rgba(0,0,0,.45);
-  display: flex; align-items: center; justify-content: center; padding: 1.25rem; z-index: 10;
-}
-#keyPanel[hidden] { display: none; }
-.sheet {
-  background: var(--panel); border: 1px solid var(--rule); border-radius: 10px;
-  width: min(32rem, 100%); max-height: 85vh; overflow: auto; padding: 1.3rem 1.5rem 1.5rem;
-}
-.sheetTop { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; }
-.sheetTop h2 { margin: 0; font-size: 1.05rem; }
+
+
+
 .x { background: none; border: none; color: var(--muted); font-size: 1.5rem; line-height: 1; padding: 0 .2rem; cursor: pointer; }
 
-.prov { border-top: 1px solid var(--rule); padding: 1rem 0 .2rem; }
+
 .prov:first-child { border-top: none; padding-top: 0; }
 .provHead { display: flex; align-items: baseline; justify-content: space-between; gap: .6rem; }
 .provName { font-weight: 650; }
@@ -208,7 +200,6 @@ iframe { width: 100%; height: 70vh; border: 1px solid var(--rule); border-radius
 </svg> PeerNa</h1>
       <p class="lede" id="lede">Drop in a manuscript.</p>
     </div>
-    <button type="button" class="ghost small" id="openKeys">API keys</button>
     <span id="account" hidden></span>
   </header>
 
@@ -265,20 +256,6 @@ iframe { width: 100%; height: 70vh; border: 1px solid var(--rule); border-radius
     <button id="go" type="submit" disabled>Start review</button>
     <div id="status"></div>
   </form>
-
-  <div id="keyPanel" hidden>
-    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="keyTitle">
-      <div class="sheetTop">
-        <h2 id="keyTitle">API keys</h2>
-        <button type="button" class="x" id="closeKeys" aria-label="Close">&times;</button>
-      </div>
-      <div id="providerList"></div>
-      <p class="foot">
-        Stored in <code id="keyPath">~/.config/ai-peer-reviewer/.env</code>, readable only by you.
-        Keys never leave this computer except to the provider they belong to.
-      </p>
-    </div>
-  </div>
 
   <section id="history" class="show">
     <h2>Reviews</h2>
@@ -359,7 +336,6 @@ function loadModels(keep) {
     $("lede").textContent = d.hosted
       ? "Drop in a manuscript. It is sent to the server hosting this page, and from there to the model."
       : "Drop in a manuscript. Runs on your machine, billed to your own API key.";
-    $("openKeys").hidden = !!d.hosted;
     $("historyLede").textContent = d.hosted
       ? "Safe to refresh — a run in progress keeps going."
       : "Kept on this machine. Safe to refresh — a run in progress keeps going.";
@@ -385,76 +361,8 @@ loadModels();
 loadAccount();
 
 // -- API keys panel --------------------------------------------------------
-const PROVIDERS = [
-  { id: "openai", label: "OpenAI", url: "https://platform.openai.com/api-keys" },
-  { id: "anthropic", label: "Anthropic", url: "https://platform.claude.com/settings/keys" },
-];
 
-function renderProviders() {
-  $("providerList").innerHTML = PROVIDERS.map(p => {
-    const mine = MODELS.filter(m => m.provider === p.id);
-    const set = mine.some(m => m.ready);
-    const hint = mine.find(m => m.hint)?.hint;
-    return `<div class="prov" data-provider="${p.id}">
-      <div class="provHead">
-        <span class="provName">${p.label}</span>
-        <span class="provState ${set ? "on" : "off"}">
-          <span class="dot">${set ? "●" : "○"}</span>
-          ${set ? `set${hint ? ` (${hint})` : ""}` : "not set"}
-        </span>
-      </div>
-      <p class="provModels">${mine.map(m => m.key).join(", ")}</p>
-      <div class="provForm">
-        <input type="password" placeholder="${set ? "Paste a new key to replace" : "Paste the key"}"
-               autocomplete="off" spellcheck="false">
-        <button type="button" class="save">Save</button>
-        <p class="provNote"></p>
-      </div>
-      <p class="provLink"><a href="${p.url}" target="_blank" rel="noreferrer">Get a key →</a></p>
-    </div>`;
-  }).join("");
 
-  for (const block of $("providerList").querySelectorAll(".prov")) {
-    const provider = block.dataset.provider;
-    const input = block.querySelector("input");
-    const button = block.querySelector(".save");
-    const note = block.querySelector(".provNote");
-    const submit = () => {
-      const key = input.value.trim();
-      note.className = "provNote";
-      note.textContent = "Checking with the provider…";
-      button.disabled = true;
-      post("/api/key", { provider, key }).then(d => {
-        button.disabled = false;
-        if (d.error) {
-          note.className = "provNote bad";
-          note.textContent = d.error;
-          return;
-        }
-        input.value = "";
-        loadModels($("model").value).then(() => {
-          renderProviders();
-          const fresh = $("providerList")
-            .querySelector(`.prov[data-provider="${provider}"] .provNote`);
-          if (fresh) {
-            fresh.className = "provNote good";
-            fresh.textContent = "Saved. Models using this provider are ready.";
-          }
-          estimate();
-        });
-      });
-    };
-    button.onclick = submit;
-    input.onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); submit(); } };
-  }
-}
-
-function openKeys() {
-  renderProviders();
-  $("keyPanel").hidden = false;
-  $("keyPanel").querySelector("input")?.focus();
-}
-function closeKeys() { $("keyPanel").hidden = true; }
 
 // -- file selection ---------------------------------------------------------
 const drop = $("drop");
@@ -584,11 +492,7 @@ $("noSearch").onchange = estimate;
 
 
 
-$("openKeys").onclick = openKeys;
-$("closeKeys").onclick = closeKeys;
-$("keyPanel").onclick = (e) => { if (e.target === $("keyPanel")) closeKeys(); };
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && !$("keyPanel").hidden) closeKeys();
 });
 
 // A caution about where the manuscript goes belongs next to the choice that
@@ -794,7 +698,10 @@ window.addEventListener("load", () => {
   loadHistory();
   // Nothing works without a key, so say so straight away rather than letting
   // the user find out when every model in the list is greyed out.
-  if (MODELS.length && !MODELS.some(m => m.ready)) openKeys();
+  if (MODELS.length && !MODELS.some(m => m.ready)) {
+    $("estimate").innerHTML =
+      '<span class="err">No model is available — the server has no API key set.</span>';
+  }
   const pending = localStorage.getItem(LAST_JOB);
   if (!pending) return;
   fetch(`/api/job/${pending}`).then(r => r.json()).then(j => {

@@ -117,58 +117,12 @@ def _is_cloud_synced(path: Path) -> bool:
     return any(marker in haystack for marker in CLOUD_MARKERS)
 
 
-def save_key(provider: str, key: str) -> None:
-    """Write one provider's key into the config file, leaving the rest alone.
-
-    The file is rewritten in place rather than appended to, so setting a key
-    twice replaces it instead of leaving a stale line that may or may not win.
-    Permissions are reasserted every time: a secret written world-readable is
-    still a leaked secret.
-    """
-    name = OPENAI_KEY_NAME if provider == "openai" else KEY_NAME
-    key = key.strip()
-    if not key:
-        raise ValueError("The key is empty.")
-    if any(c.isspace() for c in key):
-        raise ValueError("The key contains whitespace — it may be truncated or wrapped.")
-
-    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    lines: list[str] = []
-    replaced = False
-    if CONFIG_ENV.is_file():
-        for line in CONFIG_ENV.read_text(encoding="utf-8").splitlines():
-            stripped = line.strip()
-            if stripped.startswith(f"{name}=") or stripped.startswith(f"export {name}="):
-                if not replaced:
-                    lines.append(f"{name}={key}")
-                    replaced = True
-                continue
-            lines.append(line)
-    if not replaced:
-        lines.append(f"{name}={key}")
-
-    CONFIG_ENV.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
-    CONFIG_ENV.chmod(0o600)
-    os.environ[name] = key
-
-
 def key_hint(provider: str) -> str | None:
     """A few trailing characters, enough to tell two keys apart. Never the key."""
     from .models import CREDENTIAL_ENV
 
     value = os.environ.get(CREDENTIAL_ENV.get(provider, "")) or ""
     return f"…{value[-4:]}" if len(value) >= 8 else None
-
-
-def write_key_template() -> Path:
-    """Create the config-directory .env with restrictive permissions."""
-    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    if not CONFIG_ENV.exists():
-        CONFIG_ENV.write_text(
-            f"{KEY_NAME}=\n{OPENAI_KEY_NAME}=\n", encoding="utf-8"
-        )
-    CONFIG_ENV.chmod(0o600)
-    return CONFIG_ENV
 
 
 def zero_retention() -> bool:

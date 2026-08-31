@@ -90,6 +90,17 @@ testing cap on how many accounts exist at all, and the ceiling on the provider
 account. A domain rule would add a third and exclude the European institutions
 that do not use Google.
 
+## No key entry in the interface
+
+Removed. The page used to offer a panel that wrote a provider key into the
+server's config, which was sensible when the server was your own laptop and
+became a hole the moment it was not: anyone who knew the address could replace
+the credentials every review was billed to.
+
+There is one key now and it belongs to whoever runs the service, set in the
+platform's environment. Locally that is the `.env`, and the startup message
+names both the file and the variables when neither is there.
+
 ## Before the URL goes to anyone else
 
 **There is no authentication.** Anyone with the address can spend the key. Two

@@ -235,40 +235,6 @@ def convert(job: dict, fmt: str) -> bytes | None:
         )
     return None
 
-
-def _verify_key(provider: str, key: str) -> None:
-    """Ask the provider whether this key is real. Raises with a readable reason."""
-    if not key:
-        raise ValueError("Paste a key first.")
-    if provider == "openai":
-        import openai
-
-        client = openai.OpenAI(api_key=key, max_retries=0, timeout=30.0)
-        try:
-            client.models.list()
-        except openai.AuthenticationError:
-            raise ValueError("OpenAI rejected that key.") from None
-        except openai.APIConnectionError:
-            raise ValueError("Could not reach OpenAI. Check your network.") from None
-    else:
-        import anthropic
-
-        client = anthropic.Anthropic(api_key=key, max_retries=0, timeout=30.0)
-        try:
-            client.models.list()
-        except anthropic.AuthenticationError:
-            raise ValueError("Anthropic rejected that key.") from None
-        except anthropic.APIConnectionError:
-            raise ValueError("Could not reach Anthropic. Check your network.") from None
-
-
-#: upload id -> (filename, path on disk). The browser sends a manuscript once
-#: and refers to it by id after that; re-encoding a 3 MB PDF to base64 for every
-#: cost estimate is what made the preview feel slow.
-UPLOADS: dict[str, tuple[str, Path]] = {}
-MAX_UPLOADS = 10
-
-
 def _remember(filename: str, data: bytes) -> str:
     path = _spill_to_disk(filename, data)
     upload_id = uuid.uuid4().hex
@@ -588,19 +554,6 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(
                 200, {"upload_id": _remember(filename, data), "filename": filename}
             )
-        if path == "/api/key":
-            if HOSTED:
-                # On a shared deployment this endpoint would let anyone who knows
-                # the address overwrite the key every review is billed to. There
-                # is no sign-in yet, so the only safe answer is no.
-                return self._json(
-                    403,
-                    {"error": "This deployment is shared. Its API key is set by "
-                              "whoever runs it, not from this page."},
-                )
-            return self._save_key(payload)
-        if path == "/api/estimate":
-            return self._estimate(payload)
         if path == "/api/review":
             return self._review(payload)
         self._json(404, {"error": "Not found."})
@@ -629,34 +582,6 @@ class Handler(BaseHTTPRequestHandler):
         if len(data) > MAX_UPLOAD_BYTES:
             raise ValueError("File is too large.")
         return filename, data
-
-    def _save_key(self, payload: dict) -> None:
-        """Check a key works before storing it.
-
-        Saving an unverified key just moves the failure to five minutes into a
-        review, by which point the user has stopped watching.
-        """
-        provider = payload.get("provider")
-        key = (payload.get("key") or "").strip()
-        if provider not in models.CREDENTIAL_ENV:
-            return self._json(400, {"error": "Unknown provider."})
-        try:
-            _verify_key(provider, key)
-        except Exception as exc:
-            return self._json(400, {"error": str(exc)})
-        try:
-            config.save_key(provider, key)
-        except (OSError, ValueError) as exc:
-            return self._json(400, {"error": f"Could not save the key: {exc}"})
-        return self._json(
-            200,
-            {
-                "ok": True,
-                "provider": provider,
-                "hint": config.key_hint(provider),
-                "path": str(config.CONFIG_ENV),
-            },
-        )
 
     def _estimate(self, payload: dict) -> None:
         try:
