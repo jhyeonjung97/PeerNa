@@ -704,13 +704,15 @@ function loadHistory() {
   fetch("/api/jobs").then(r => r.json()).then(d => {
     const rows = d.jobs || [];
     if (d.private) {
-      // Nothing is hidden from you that you could otherwise see: the list is
-      // shared by everyone using this deployment, so on a shared one there is
-      // no version of it that is yours.
+      // Say what to do, not why. The reason is that the history is one list for
+      // the whole server, which is a fact about the inside of this thing and not
+      // one a visitor can act on — and announcing that everyone's reviews sit
+      // together is the last thing to put on the page of a tool for confidential
+      // manuscripts.
       $("history").classList.add("show");
       $("historyList").innerHTML =
-        '<li class="empty">Recent reviews are not listed on a shared deployment — ' +
-        'the list would be everyone\'s. Keep the link to your report; it stays valid.</li>';
+        '<li class="empty">Keep the link to your report — it stays valid. ' +
+        'Reviews are not listed here.</li>';
       return;
     }
     if (!rows.length) return;
