@@ -289,9 +289,9 @@ iframe { width: 100%; height: 70vh; border: 1px solid var(--rule); border-radius
     <div id="status"></div>
   </form>
 
-  <section id="history" class="show">
+  <section id="history">
     <h2>Reviews</h2>
-    <p class="lede" id="historyLede" style="margin:.2rem 0 .8rem">Safe to refresh — a run in progress keeps going.</p>
+    <p class="lede" id="historyLede" style="margin:.2rem 0 .8rem" hidden></p>
     <ul id="historyList"></ul>
   </section>
 
@@ -393,11 +393,13 @@ function loadModels(keep) {
     // your key, one on a server spending somebody else's. Saying which is not a
     // detail — it decides whether uploading a manuscript is your call alone.
     $("lede").textContent = d.hosted
-      ? "Drop in a manuscript. It is sent to the server hosting this page, and from there to the model."
+      ? "Drop in a manuscript."
       : "Drop in a manuscript. Runs on your machine, billed to your own API key.";
-    $("historyLede").textContent = d.hosted
-      ? "Safe to refresh — a run in progress keeps going."
+    const historyLede = $("historyLede");
+    historyLede.textContent = d.hosted
+      ? ""
       : "Kept on this machine. Safe to refresh — a run in progress keeps going.";
+    historyLede.hidden = !historyLede.textContent;
     const want = keep || $("model").value || d.default;
     $("model").innerHTML = "";
     for (const m of d.models) {
@@ -702,11 +704,11 @@ function loadHistory() {
   fetch("/api/jobs").then(r => r.json()).then(d => {
     const rows = d.jobs || [];
     if (d.signedOut) {
-      $("history").classList.add("show");
-      $("historyList").innerHTML =
-        '<li class="empty">Your reviews appear here once you sign in. ' +
-        '<button type="button" class="ghost small" id="signInHere">Sign in</button></li>';
-      $("signInHere").onclick = startSignIn;
+      // Nothing to show and nothing to explain: the header already carries
+      // the sign-in button, so an empty section prompting for one is a
+      // second ask for the same thing.
+      $("history").classList.remove("show");
+      $("historyList").innerHTML = "";
       return;
     }
     if (d.private) {
