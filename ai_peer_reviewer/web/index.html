@@ -25,7 +25,7 @@ body {
   font: 15px/1.6 ui-sans-serif, system-ui, -apple-system, sans-serif;
 }
 main { max-width: 44rem; margin: 0 auto; }
-h1 { font-size: 1.5rem; margin: 0 0 .3rem; font-weight: 650;
+h1 { font-size: 1.5rem; margin: 0; font-weight: 650;
      display: flex; align-items: center; gap: .55rem; }
 .logo { width: 1.6em; height: 1.6em; flex: none; color: var(--accent); }
 .lede { color: var(--muted); margin: 0 0 2rem; }
@@ -74,8 +74,12 @@ select { font: inherit; padding: .3rem .5rem; border-radius: 5px; border: 1px so
 .opt { display: flex; align-items: flex-start; gap: .5rem; margin-top: .7rem; }
 .opt small { color: var(--muted); display: block; }
 
-.top { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
-.top .lede { margin-bottom: 2rem; }
+.top { display: block; }
+/* The name and the sign-in share a line; the sentence about where a manuscript
+   goes gets the full width under them, where it is read rather than squeezed
+   into whatever the button leaves behind. */
+.topRow { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.top .lede { margin: .35rem 0 2rem; }
 button.small { padding: .35rem .8rem; font-size: .85rem; flex: none; }
 
 
@@ -186,7 +190,7 @@ iframe { width: 100%; height: 70vh; border: 1px solid var(--rule); border-radius
 <body>
 <main>
   <header class="top">
-    <div>
+    <div class="topRow">
       <h1><svg class="logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="PeerNa">
   <title>PeerNa</title>
   <!--
@@ -222,9 +226,9 @@ iframe { width: 100%; height: 70vh; border: 1px solid var(--rule); border-radius
     <circle cx="32" cy="32" r="5.2"/>
   </g>
 </svg> PeerNa</h1>
-      <p class="lede" id="lede">Drop in a manuscript.</p>
+      <span id="account" hidden></span>
     </div>
-    <span id="account" hidden></span>
+    <p class="lede" id="lede">Drop in a manuscript.</p>
   </header>
 
   <p class="notice">
