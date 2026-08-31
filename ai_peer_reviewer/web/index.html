@@ -395,11 +395,9 @@ function loadModels(keep) {
     $("lede").textContent = d.hosted
       ? "Drop in a manuscript."
       : "Drop in a manuscript. Runs on your machine, billed to your own API key.";
-    const historyLede = $("historyLede");
-    historyLede.textContent = d.hosted
-      ? ""
-      : "Kept on this machine. Safe to refresh — a run in progress keeps going.";
-    historyLede.hidden = !historyLede.textContent;
+    // The list explains itself; a sentence above it saying so was one more
+    // thing to read on a page that already asks for enough attention.
+    $("historyLede").hidden = true;
     const want = keep || $("model").value || d.default;
     $("model").innerHTML = "";
     for (const m of d.models) {
