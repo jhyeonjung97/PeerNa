@@ -82,6 +82,19 @@ HOSTED = False
 #: compares owners, so it needs a value rather than a special case.
 LOCAL_VIEWER = "local"
 
+#: Shown for an instant in the popup after Google sends it back. postMessage is
+#: aimed at this exact origin so nothing else on the page can read it.
+POPUP_DONE = """<!doctype html>
+<meta charset="utf-8"><title>Signed in</title>
+<body style="font:14px ui-sans-serif,system-ui,sans-serif;padding:2rem;color:#555">
+Signed in. You can close this window.
+<script>
+  try { window.opener && window.opener.postMessage("peerna:signed-in", location.origin); }
+  catch (e) {}
+  window.close();
+</script>
+</body>"""
+
 
 #: Roughly what the consistency checks add, measured end to end on a paper with
 #: 46 references. Almost independent of manuscript length.
@@ -392,6 +405,13 @@ class Handler(BaseHTTPRequestHandler):
             if not auth.configured():
                 return self._json(503, {"error": "Sign-in is not configured."})
             state = secrets.token_urlsafe(16)
+            # Whether to come back into this window or hand the result to the
+            # one that opened it. Carried on the state cookie rather than
+            # through Google, which would only echo back what it was given.
+            if urllib.parse.parse_qs(
+                self.path.split("?", 1)[1] if "?" in self.path else ""
+            ).get("popup"):
+                state += ".popup"
             self.send_response(302)
             self.send_header("Location", auth.login_url(self._redirect_uri(), state))
             # The state is echoed back by Google and compared here, so a link
@@ -416,14 +436,30 @@ class Handler(BaseHTTPRequestHandler):
             email = auth.exchange(query.get("code", [""])[0], self._redirect_uri())
             if not email:
                 return self._json(400, {"error": "Google did not confirm that account."})
-            self.send_response(302)
-            self.send_header("Location", "/")
-            self.send_header(
-                "Set-Cookie",
+
+            session = (
                 f"{auth.COOKIE}={auth.issue(email)}; Path=/; HttpOnly; "
                 f"SameSite=Lax; Max-Age={auth.SESSION_DAYS * 86400}"
-                + ("; Secure" if HOSTED else ""),
+                + ("; Secure" if HOSTED else "")
             )
+            if expected.value.endswith(".popup"):
+                # The cookie is set on this response either way; the page just
+                # tells the window that opened it to refresh, and gets out of
+                # the way. Rendered rather than redirected, because redirecting
+                # a popup to the app leaves a second copy of it open.
+                body = POPUP_DONE.encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Set-Cookie", session)
+                self.send_header("Set-Cookie", "peerna_state=; Path=/; Max-Age=0")
+                self.end_headers()
+                self.wfile.write(body)
+                return
+
+            self.send_response(302)
+            self.send_header("Location", "/")
+            self.send_header("Set-Cookie", session)
             self.send_header("Set-Cookie", "peerna_state=; Path=/; Max-Age=0")
             self.end_headers()
             return
