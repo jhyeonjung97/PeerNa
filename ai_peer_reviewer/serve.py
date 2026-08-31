@@ -29,7 +29,7 @@ import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from . import auth, backends, checkpoint as checkpoint_mod, config, loader, models, notify
+from . import auth, backends, checkpoint as checkpoint_mod, config, loader, models, notify, quota
 from .passes import PASSES, system_prompt
 from .render import render, render_html
 from .review import Reviewer, total_steps
@@ -323,6 +323,7 @@ def _run_review(job_id: str, path: Path, spec, web_search: bool,
         if reviewer.reused:
             _update(job_id, resumed=list(reviewer.reused))
 
+        quota.record(_job(job_id).get("owner"))
         display_name = _job(job_id).get("filename", manuscript.name)
         _update(
             job_id,
@@ -498,9 +499,12 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/me":
+            viewer = self._viewer()
             return self._json(200, {
-                "email": self._viewer(),
+                "email": viewer,
                 "required": HOSTED and auth.configured(),
+                "free": quota.FREE_REVIEWS,
+                "remaining": quota.remaining(viewer),
             })
 
         if path == "/healthz":
@@ -703,6 +707,14 @@ class Handler(BaseHTTPRequestHandler):
                 # The one endpoint that spends money. Everything else is either
                 # free or already scoped to what the caller can see.
                 return self._json(401, {"error": "Sign in to run a review."})
+            left = quota.remaining(viewer)
+            if left is not None and left <= 0:
+                # 402 rather than 403: nothing is wrong with the request or the
+                # account, there is just nothing left on it.
+                return self._json(402, {
+                    "error": f"You have used your {quota.FREE_REVIEWS} free reviews.",
+                    "exhausted": True,
+                })
             asked = payload.get("model") or config.configured_model() or models.DEFAULT_MODEL
             spec = models.resolve(models.preferred(asked))
 

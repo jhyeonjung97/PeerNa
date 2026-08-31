@@ -121,6 +121,25 @@ answer. Both came from deleting code that sat next to code being deleted, and
 neither broke an import or a start-up — they reached the deployed service and
 were found by using it.
 
+## Free reviews
+
+Three per Google account, then a 402. `AI_PEER_REVIEWER_FREE_REVIEWS` changes
+the number; the count lives in `/data/.cache/ai-peer-reviewer/quota.json` on the
+mounted disk, so it survives a deploy.
+
+Counted apart from the job history on purpose: that is capped at fifty files and
+sweeps the oldest, so counting finished jobs would hand somebody a fresh
+allowance once enough other people had used the service — the quota would leak
+in exactly the conditions that make one matter.
+
+Only completed reviews count. A run that failed, or that a deploy interrupted,
+is not one anybody received. That leaves a way to run indefinitely by abandoning
+every review just before it finishes, which is the better thing to be exposed to
+than invoicing people for our own outages.
+
+Nothing takes payment yet. When the free reviews are gone the button says so and
+the footer says who to write to.
+
 ## Before the URL goes to anyone else
 
 **There is no authentication.** Anyone with the address can spend the key. Two
