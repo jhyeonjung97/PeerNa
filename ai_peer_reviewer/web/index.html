@@ -158,8 +158,14 @@ iframe { width: 100%; height: 70vh; border: 1px solid var(--rule); border-radius
 .dl { display: flex; gap: .4rem; align-items: center; font-size: .88rem; color: var(--muted); }
 .dlNote { font-size: .85rem; color: var(--warn); flex-basis: 100%; margin: .3rem 0 0; }
 
-#account { margin-left: auto; display: flex; align-items: center; gap: .6rem; }
-#account .who { color: var(--muted); font-size: .85rem; }
+#account { margin-left: auto; flex: none; display: flex; align-items: center; gap: .6rem; }
+/* An address is as long as it is. Truncating it keeps the row one line and
+   still shows enough to tell two accounts apart; the full text is on hover. */
+#account .who {
+  color: var(--muted); font-size: .85rem;
+  max-width: 16rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+#account .linkish { white-space: nowrap; }
 
 /* Google's mark is drawn against white, and recolouring the surface under it is
    what their guidelines rule out — so this stays white in dark mode. */
@@ -181,48 +187,12 @@ iframe { width: 100%; height: 70vh; border: 1px solid var(--rule); border-radius
   border-bottom: 1px solid var(--rule);
 }
 .linkish:hover { color: var(--ink); border-bottom-color: currentColor; }
-#cover {
-  min-height: 100vh; display: grid; place-items: center;
-  padding: 2rem 1.5rem; text-align: center;
-}
-#cover[hidden] { display: none; }
-.coverInner { max-width: 27rem; }
-.coverMark { width: 56px; height: 56px; color: var(--accent); }
-#cover h1 { justify-content: center; font-size: 1.8rem; margin: .9rem 0 .5rem; }
-#cover p { color: var(--muted); margin: 0 0 1.6rem; line-height: 1.6; }
-#cover .coverNote {
-  margin: 2.2rem 0 0; font-size: .8rem; line-height: 1.65;
-  padding-top: 1.2rem; border-top: 1px solid var(--rule);
-}
-#coverSignIn { display: flex; justify-content: center; }
+
 
 </style>
 </head>
 <body>
-<section id="cover" hidden>
-  <div class="coverInner">
-    <svg class="coverMark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="PeerNa">
-      <g fill="none" stroke="currentColor" stroke-width="3.4"
-         stroke-linejoin="round" stroke-linecap="round">
-        <g><path d="M32 30 L32 8 L44 12 L44 30 Z"/><path d="M44 12 L38.5 14 L38.5 8.3" stroke-width="2.2"/></g>
-        <g transform="rotate(90 32 32)"><path d="M32 30 L32 8 L44 12 L44 30 Z"/><path d="M44 12 L38.5 14 L38.5 8.3" stroke-width="2.2"/></g>
-        <g transform="rotate(180 32 32)"><path d="M32 30 L32 8 L44 12 L44 30 Z"/><path d="M44 12 L38.5 14 L38.5 8.3" stroke-width="2.2"/></g>
-        <g transform="rotate(270 32 32)"><path d="M32 30 L32 8 L44 12 L44 30 Z"/><path d="M44 12 L38.5 14 L38.5 8.3" stroke-width="2.2"/></g>
-        <circle cx="32" cy="32" r="5.2"/>
-      </g>
-    </svg>
-    <h1>PeerNa</h1>
-    <p>A referee report on your manuscript, in the shape journals actually receive.</p>
-    <div id="coverSignIn"></div>
-    <p class="coverNote">
-      Reviewing for a journal? Elsevier, ACS, Springer Nature and NIH among others
-      restrict uploading manuscripts under review to AI tools — check the journal's
-      reviewer policy first.
-    </p>
-  </div>
-</section>
-
-<main id="app">
+<main>
   <header class="top">
     <div>
       <h1><svg class="logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="PeerNa">
@@ -367,8 +337,7 @@ function loadAccount() {
       box.innerHTML = `<span class="who">${d.email}</span> ` +
         `<a class="linkish" href="/auth/logout">Sign out</a>`;
     } else if (d.required) {
-      // Google's mark and wording, as their branding rules ask. Cloned onto the
-      // cover below, so the two entry points cannot drift apart.
+      // Google's mark and wording, as their branding rules ask.
       box.innerHTML = `<a class="gbtn" href="/auth/login" id="signIn">
         <svg viewBox="0 0 18 18" aria-hidden="true">
           <path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.7-1.57 2.68-3.88 2.68-6.62z"/>
@@ -382,18 +351,9 @@ function loadAccount() {
     }
     // Nothing here spends money until someone has signed in, so the button that
     // starts a review says why it is unavailable rather than simply refusing.
-    window.SIGNED_IN = !d.required || (d.email && d.email !== "local");
-    // Before signing in there is nothing to do on the page — every control
-    // either spends money or shows work that belongs to somebody. So it shows
-    // what this is and one way in, rather than a form that refuses.
-    const out = !window.SIGNED_IN;
-    $("cover").hidden = !out;
-    $("app").hidden = out;
-    if (out && !$("coverSignIn").children.length) {
-      $("coverSignIn").append($("signIn").cloneNode(true));
-      $("coverSignIn").firstElementChild.id = "coverSignInBtn";
-      $("coverSignInBtn").onclick = startSignIn;
-    }
+    // Boolean(), because `d.email && …` yields null when the address is null,
+    // and the gate compared against false. It read as signed in.
+    window.SIGNED_IN = Boolean(!d.required || (d.email && d.email !== "local"));
     gate();
   });
 }
@@ -605,9 +565,12 @@ function showCaution() {
 
 $("model").onchange = () => { showCaution(); estimate(); };
 function gate() {
+  // A disabled button with no explanation is a dead end, and the reason differs:
+  // no manuscript yet, or nobody signed in. Say which.
   const needsSignIn = window.SIGNED_IN === false;
   $("go").disabled = !upload || needsSignIn;
-  $("go").title = needsSignIn ? "Sign in with Google to run a review." : "";
+  $("go").textContent = needsSignIn ? "Sign in to run a review" : "Start review";
+  $("go").title = needsSignIn ? "Use the Sign in button above." : "";
 }
 
 const body = () => ({
