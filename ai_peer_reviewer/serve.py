@@ -259,6 +259,23 @@ def _remember(filename: str, data: bytes) -> str:
     return upload_id
 
 
+#: upload id -> (filename, path on disk). The browser sends a manuscript once
+#: and refers to it by id afterwards, so changing the model does not push
+#: another few megabytes of base64 across.
+UPLOADS: dict[str, tuple[str, Path]] = {}
+MAX_UPLOADS = 10
+
+
+def _forget(upload_id: str | None) -> None:
+    """Drop a remembered upload and delete the file behind it."""
+    if not upload_id:
+        return
+    with JOBS_LOCK:
+        found = UPLOADS.pop(upload_id, None)
+    if found:
+        found[1].unlink(missing_ok=True)
+
+
 def _spill_to_disk(filename: str, data: bytes) -> Path:
     """The loader works on paths, so uploads land in a temp file."""
     suffix = Path(filename).suffix or ".pdf"
@@ -269,7 +286,9 @@ def _spill_to_disk(filename: str, data: bytes) -> Path:
 
 
 def _run_review(job_id: str, path: Path, spec, web_search: bool,
-                supplementary: Path | None = None) -> None:
+                supplementary: Path | None = None,
+                upload_id: str | None = None,
+                supplementary_id: str | None = None) -> None:
     started = time.time()
     try:
         manuscript = loader.load(path, spec)
@@ -334,6 +353,13 @@ def _run_review(job_id: str, path: Path, spec, web_search: bool,
         _persist(job_id, _job(job_id) or {})
     finally:
         path.unlink(missing_ok=True)
+        # And the copy the upload endpoint kept, which existed so that changing
+        # the model would not mean sending the file again. Once the review has
+        # run there is nothing left to re-estimate, and a manuscript under
+        # review should not sit on the disk waiting to be pushed out by the
+        # next twenty uploads.
+        _forget(upload_id)
+        _forget(supplementary_id)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -727,7 +753,8 @@ class Handler(BaseHTTPRequestHandler):
 
             threading.Thread(
                 target=_run_review,
-                args=(job_id, path, spec, not payload.get("no_web_search"), si_path),
+                args=(job_id, path, spec, not payload.get("no_web_search"), si_path,
+                      payload.get("upload_id"), payload.get("supplementary_id")),
                 daemon=True,
             ).start()
             self._json(200, {"job_id": job_id})

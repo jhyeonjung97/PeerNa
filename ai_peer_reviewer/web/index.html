@@ -230,7 +230,7 @@ iframe { width: 100%; height: 70vh; border: 1px solid var(--rule); border-radius
     <circle cx="32" cy="32" r="5.2"/>
   </g>
 </svg> PeerNa</h1>
-      <p class="lede" id="lede">Drop in a manuscript.</p>
+      <p class="lede" id="lede" hidden></p>
     </div>
     <span id="account" hidden></span>
   </header>
@@ -392,9 +392,12 @@ function loadModels(keep) {
     // Two different programs share this page: one on your own machine spending
     // your key, one on a server spending somebody else's. Saying which is not a
     // detail — it decides whether uploading a manuscript is your call alone.
+    // The drop zone already says to drop a PDF. A line above it saying the same
+    // thing is the sort of text a page accumulates and nobody reads.
     $("lede").textContent = d.hosted
-      ? "Drop in a manuscript."
-      : "Drop in a manuscript. Runs on your machine, billed to your own API key.";
+      ? ""
+      : "Runs on your machine, billed to your own API key.";
+    $("lede").hidden = !$("lede").textContent;
     // The list explains itself; a sentence above it saying so was one more
     // thing to read on a page that already asks for enough attention.
     $("historyLede").hidden = true;

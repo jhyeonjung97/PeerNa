@@ -21,7 +21,13 @@ from pathlib import Path
 CACHE_ROOT = Path.home() / ".cache" / "ai-peer-reviewer" / "runs"
 
 #: Runs older than this are cleared on the next start.
-MAX_AGE_DAYS = 14
+#:
+#: A successful review clears its own checkpoint the moment the report exists,
+#: so this only governs interrupted ones — and what they hold is pass notes,
+#: which quote the manuscript at length. Two days rather than fourteen because
+#: resuming matters within minutes of a restart, not a fortnight later, and the
+#: notes describe papers that are unpublished and under review.
+MAX_AGE_DAYS = 2
 
 
 def run_id(manuscript_bytes: bytes, mode: str, model_id: str) -> str:

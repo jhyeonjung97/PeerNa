@@ -101,6 +101,16 @@ There is one key now and it belongs to whoever runs the service, set in the
 platform's environment. Locally that is the `.env`, and the startup message
 names both the file and the variables when neither is there.
 
+## Before pushing
+
+    ./tests/run.sh
+
+Compiles the package, then checks two things that have each shipped broken: a
+name read but never bound, and a path the page calls that the server does not
+answer. Both came from deleting code that sat next to code being deleted, and
+neither broke an import or a start-up — they reached the deployed service and
+were found by using it.
+
 ## Before the URL goes to anyone else
 
 **There is no authentication.** Anyone with the address can spend the key. Two
