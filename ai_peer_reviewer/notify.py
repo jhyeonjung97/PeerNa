@@ -18,6 +18,13 @@ SMTP_USER = "SMTP_USER"
 SMTP_PASSWORD = "SMTP_PASSWORD"
 SMTP_HOST = "SMTP_HOST"
 
+#: Who the mail claims to be from. With a personal mailbox this is the same as
+#: the login, which is why it went unnoticed. A sending service is different:
+#: Resend logs you in as the literal string "resend" and takes the API key as
+#: the password, so the username is not an address at all and a message built
+#: from it is rejected before it leaves.
+SMTP_FROM = "SMTP_FROM"
+
 
 def announce(subject: str, body: str, subtitle: str = "") -> list[str]:
     """Send what is configured. Returns the channels that actually went out."""
@@ -45,13 +52,14 @@ def _email(subject: str, body: str) -> bool:
     to = os.environ.get(EMAIL_TO)
     user = os.environ.get(SMTP_USER) or to
     password = os.environ.get(SMTP_PASSWORD)
+    sender = os.environ.get(SMTP_FROM) or user
     if not (to and user and password):
         return False
 
     host = os.environ.get(SMTP_HOST, "smtp.gmail.com")
     message = EmailMessage()
     message["Subject"] = subject
-    message["From"] = user
+    message["From"] = sender
     message["To"] = to
     message.set_content(body)
 
