@@ -448,8 +448,12 @@ function loadModels(keep) {
     for (const m of d.models) {
       const o = document.createElement("option");
       o.value = m.key;
-      o.textContent = `${m.label}${m.ready ? "" : "  (no API key)"}`;
-      o.disabled = !m.ready;
+      // A superseded entry still resolves — to its replacement — so listing it
+      // as choosable would offer a choice that is not one.
+      o.textContent = `${m.label}${m.ready ? "" : "  (no API key)"}` +
+        (m.superseded ? "  (unavailable)" : "");
+      if (m.superseded) o.disabled = true;
+      o.disabled = !m.ready || m.superseded;
       o.title = m.caution ? `${m.note}\n\n${m.caution}` : m.note;
       if (m.key === want) o.selected = true;
       $("model").append(o);

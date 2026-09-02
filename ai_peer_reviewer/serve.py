@@ -568,7 +568,14 @@ class Handler(BaseHTTPRequestHandler):
                         }
                         for name in models.ALIASES
                     ],
-                    "default": config.configured_model() or models.DEFAULT_MODEL,
+                    # Through preferred(), like every other use of a model
+                    # name. Reporting the configured one meant the menu showed a
+                    # routed model after the router had expired, while the
+                    # review it started ran on the direct path — the page
+                    # naming one thing and the server doing another.
+                    "default": models.preferred(
+                        config.configured_model() or models.DEFAULT_MODEL
+                    ),
                 },
             )
 
