@@ -552,7 +552,6 @@ class Handler(BaseHTTPRequestHandler):
                     "models": [
                         {
                             "key": name,
-                            "superseded": models.preferred(name) != name,
                             "label": models.REGISTRY[name].label,
                             "provider": models.REGISTRY[name].provider,
                             "note": models.QUALITY_NOTE[name],
@@ -569,10 +568,8 @@ class Handler(BaseHTTPRequestHandler):
                         for name in models.ALIASES
                     ],
                     # Through preferred(), like every other use of a model
-                    # name. Reporting the configured one meant the menu showed a
-                    # routed model after the router had expired, while the
-                    # review it started ran on the direct path — the page
-                    # naming one thing and the server doing another.
+                    # name, so a configuration naming a retired model selects
+                    # the one that will actually run.
                     "default": models.preferred(
                         config.configured_model() or models.DEFAULT_MODEL
                     ),

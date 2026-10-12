@@ -8,7 +8,6 @@ matters is declared here once and the request builders read from the spec.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
 
 
 @dataclass(frozen=True)
@@ -16,7 +15,7 @@ class ModelSpec:
     id: str
     label: str
 
-    #: Which backend runs this model: "anthropic", "openai", or "monorouter".
+    #: Which backend runs this model: "anthropic" or "openai".
     provider: str
     input_per_mtok: float
     output_per_mtok: float
@@ -56,16 +55,6 @@ class ModelSpec:
     #: and never once shown to anyone, which made it a comment rather than a
     #: safeguard. `retention_problem` is what reads it.
     requires_data_retention: bool = False
-
-    # -- routed models --------------------------------------------------------
-
-    #: Where the OpenAI-compatible endpoint lives, when it is not OpenAI's own.
-    base_url: str | None = None
-
-    #: Whether this route can see a PDF. A router that only forwards text still
-    #: reviews the manuscript, but the figures pass has nothing to look at, so
-    #: the loader is told to extract text rather than attach pages.
-    accepts_pdf: bool = True
 
     def estimate_cost(self, input_tokens: int, output_tokens: int) -> float:
         return (
@@ -148,65 +137,8 @@ LUNA = ModelSpec(
     supports_effort=True,
 )
 
-# --------------------------------------------------------------------------
-# MonoRouter
-#
-# An OpenAI-compatible endpoint that fronts OpenAI, Anthropic and Google models
-# behind one key. It exists here for one job: every result so far was measured
-# on Luna alone, so "the extra passes do not help" could equally well be "Luna
-# does not benefit from extra passes". Running the same ablation on Opus tells
-# those apart, and this is the only route to a Claude model without a second
-# account.
-#
-# It is not the default and should not become one. Three things are lost:
-#
-# It speaks the same Responses API as OpenAI, so files, structured output and
-# server-side web search all work and the ordinary backend drives it unchanged.
-# Its *chat-completions* endpoint does none of the three — no files, no web
-# search, and `response_format` accepted and then silently ignored — which is
-# worth writing down, because that endpoint is the obvious one to try first and
-# every failure it produces looks like something else.
-#
-# One header matters: Cloudflare answers the SDK's default User-Agent with a
-# bare `403 error code: 1010`, which is indistinguishable from a bad key.
-#
-# Prices are the upstream list prices. The router's own margin is unknown, so
-# treat every cost this reports as a floor.
-#
-# **Temporary.** The account behind MONO_ROURTER_API_KEY expires at the end of
-# August 2026. It is the default while it has credit and the direct accounts do
-# not; after that the `r-` models stop working and the default returns to `luna`
-# on OpenAI's own endpoint — which is the better home for a manuscript anyway,
-# since it removes a company from the path and can run under zero retention.
-# --------------------------------------------------------------------------
-
-MONOROUTER_URL = "https://monogpt.kr/api/monorouter/v1/"
-
-
-def _routed(model_id: str, label: str, spec: ModelSpec) -> ModelSpec:
-    """The same model, reached through the router instead of its own API."""
-    from dataclasses import replace
-
-    return replace(
-        spec,
-        id=model_id,
-        label=f"{label} (router)",
-        provider="monorouter",
-        base_url=MONOROUTER_URL,
-        accepts_pdf=True,
-        supports_fallbacks=False,
-        requires_data_retention=False,
-    )
-
-
-ROUTED_OPUS_5 = _routed("claude-opus-5", "Opus 5", OPUS_5)
-ROUTED_SONNET_5 = _routed("claude-sonnet-5", "Sonnet 5", SONNET_5)
-ROUTED_HAIKU_45 = _routed("claude-haiku-4.5", "Haiku 4.5", HAIKU_45)
-ROUTED_LUNA = _routed("gpt-5.6-luna", "GPT-5.6 Luna", LUNA)
-
 #: Order here is the order shown in `--help`.
-ALIASES = ("luna", "fable", "opus", "sonnet", "haiku",
-           "r-opus", "r-sonnet", "r-haiku", "r-luna")
+ALIASES = ("luna", "fable", "opus", "sonnet", "haiku")
 
 REGISTRY: dict[str, ModelSpec] = {
     "fable": FABLE_5,
@@ -219,16 +151,11 @@ REGISTRY: dict[str, ModelSpec] = {
     SONNET_5.id: SONNET_5,
     HAIKU_45.id: HAIKU_45,
     LUNA.id: LUNA,
-    "r-opus": ROUTED_OPUS_5,
-    "r-sonnet": ROUTED_SONNET_5,
-    "r-haiku": ROUTED_HAIKU_45,
-    "r-luna": ROUTED_LUNA,
 }
 
 #: Luna, and deliberately so. It is the cheapest model here by an order of
 #: magnitude, every measurement in DECISIONS.md was taken on it, and changing it
-#: would invalidate all of them at once. The routed Claude models are for the
-#: one experiment that needs them.
+#: would invalidate all of them at once.
 DEFAULT_MODEL = "luna"
 
 #: Shown by `--help` and in the cost preview.
@@ -238,27 +165,20 @@ QUALITY_NOTE = {
     "sonnet": "Solid. Good for iterating on your own drafts.",
     "haiku": "Fast and cheap, but shallow — expect generic comments. 200K context only.",
     "luna": "Cheapest by far (OpenAI). Bottom tier, so expect shallow findings. Needs OPENAI_API_KEY.",
-    "r-opus": "Opus 5 through MonoRouter. Use to tell an architecture problem from a model one.",
-    "r-sonnet": "Sonnet 5 through MonoRouter.",
-    "r-haiku": "Haiku 4.5 through MonoRouter.",
-    "r-luna": "Luna through MonoRouter — same model as `luna`, billed to the router key.",
 }
 
 #: Environment variable each provider's SDK reads.
 CREDENTIAL_ENV = {
     "anthropic": "ANTHROPIC_API_KEY",
     "openai": "OPENAI_API_KEY",
-    "monorouter": "MONO_ROURTER_API_KEY",
 }
 
 
-#: When the routed account's credit runs out, in UTC. The account is Korean and
-#: expires at the end of August 2026 local time, which is 15:00 UTC on the 31st.
-ROUTER_EXPIRES = datetime(2026, 8, 31, 15, 0, tzinfo=timezone.utc)
-
-#: What each routed model becomes once the router is gone. Same model where the
-#: direct path has it; Luna's own endpoint for Luna.
-DIRECT_EQUIVALENT = {
+#: Names that once reached a model through MonoRouter, a middleman whose account
+#: ran out at the end of August 2026. Gone from every menu; kept here only so a
+#: configuration still naming one runs on the same model directly instead of
+#: failing.
+RETIRED = {
     "r-luna": "luna",
     "r-opus": "opus",
     "r-sonnet": "sonnet",
@@ -266,23 +186,9 @@ DIRECT_EQUIVALENT = {
 }
 
 
-def preferred(name: str, now: "datetime | None" = None) -> str:
-    """The model to actually use, which is not always the one configured.
-
-    A date rather than a health check, because the failure this guards against
-    cannot be detected any other way: an expired key is still a key, so nothing
-    short of spending a request tells you it has stopped working. The date is
-    known in advance, so it is used.
-
-    The direct path is where this was always going. It puts one company between
-    the manuscript and the model instead of two, and it is the only path that can
-    run under a zero-retention agreement.
-    """
-    if name not in DIRECT_EQUIVALENT:
-        return name
-    if (now or datetime.now(timezone.utc)) < ROUTER_EXPIRES:
-        return name
-    return DIRECT_EQUIVALENT[name]
+def preferred(name: str) -> str:
+    """The model to actually use, which is not always the one configured."""
+    return RETIRED.get(name, name)
 
 
 def resolve(name: str) -> ModelSpec:
@@ -297,25 +203,15 @@ def resolve(name: str) -> ModelSpec:
 def retention_problem(spec: ModelSpec, zero_retention: bool) -> str | None:
     """Why this model is a poor fit for the confidentiality the operator claims.
 
-    Returns a sentence to show the user, or None. Two separate things are at
-    stake and only one of them is about retention:
+    Returns a sentence to show the user, or None.
 
-    - A model that keeps requests cannot honour a zero-retention agreement, so
-      choosing one silently would make the claim false.
-    - A routed model puts a second company between the manuscript and the model.
-      Its logging policy is its own, and we have no way to see it.
+    A model that keeps requests cannot honour a zero-retention agreement, so
+    choosing one silently would make the claim false.
     """
     if zero_retention and spec.requires_data_retention:
         return (
             f"{spec.label} cannot run under a zero-retention agreement — the "
             "provider keeps requests for this model regardless. Choose another "
             "model for a manuscript under review."
-        )
-    if spec.provider == "monorouter":
-        return (
-            f"{spec.label} is reached through a router, so the manuscript passes "
-            "through a second company before it reaches the model. Its retention "
-            "policy is not ours to see. For a manuscript under review, prefer a "
-            "model on its provider's own endpoint."
         )
     return None

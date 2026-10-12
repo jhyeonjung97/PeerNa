@@ -37,11 +37,6 @@ without changing anything here.
    blueprint, so it never enters the repository or a build log.
 3. Wait for the first build. Around five minutes, most of it numpy and PyMuPDF.
 
-While `MONO_ROURTER_API_KEY` still has credit and the OpenAI account does not,
-set that instead and `AI_PEER_REVIEWER_MODEL=r-luna`. It expires at the end of
-August 2026 — see `TODO.md` §7 for the switch back, which is also the better
-home for a manuscript.
-
 The service starts with no corpus index. That is fine — the precedent pass is
 skipped when there is no index and the review is complete without it, just
 without the field-specific layer. To add it, run `peerna-harvest` against the
@@ -158,8 +153,7 @@ things from `TODO.md` §6 are not optional once the address is shared:
 
 And the confidentiality note that the page already shows applies with more force
 once other people's manuscripts are involved: they pass through whichever
-provider the key belongs to, and through the router as well if a routed model is
-selected. See the caution beside the model menu.
+provider the key belongs to. See the caution beside the model menu.
 
 ## The free plan
 

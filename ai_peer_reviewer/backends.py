@@ -31,8 +31,6 @@ from .schema import strict_json_schema
 
 MAX_TOKENS = 32_000
 
-#: Sent on every request. See OpenAIBackend.__init__ for why this is not cosmetic.
-USER_AGENT = "peerna/1.0"
 CACHE_TTL = "1h"
 
 #: A review is a handful of large requests, so a rate limit is common on lower
@@ -399,14 +397,8 @@ class OpenAIBackend(Backend):
         self._openai = openai
         self.client = openai.OpenAI(
             api_key=os.environ.get(CREDENTIAL_ENV[spec.provider]),
-            base_url=spec.base_url,          # None means OpenAI's own endpoint
             max_retries=MAX_RETRIES,
             timeout=REQUEST_TIMEOUT_SECONDS,
-            # Cloudflare in front of the router answers the SDK's default agent
-            # with a bare `403 error code: 1010` and no explanation, which reads
-            # exactly like a rejected key. Any other agent is accepted. Harmless
-            # against OpenAI itself, so it is sent unconditionally.
-            default_headers={"User-Agent": USER_AGENT},
         )
         #: Flipped the first time a native PDF request is rejected.
         self.rasterise_pdfs = False
@@ -473,13 +465,11 @@ class OpenAIBackend(Backend):
     def _request(self, kwargs: dict, label: str = "working", text_format=None):
         """Always streamed, even though nothing here consumes the events.
 
-        A pass that searches the web runs well past two minutes, and the router
-        sits behind a proxy that gives up on a silent connection after 120
-        seconds — `524 origin_response_timeout`, which arrives looking like the
-        model failed rather than the transport. A streamed response puts bytes
-        on the wire continuously and the timer never starts. Against OpenAI's
-        own endpoint this changes nothing except that very long requests stop
-        being at the mercy of whatever sits in front of them.
+        A pass that searches the web runs well past two minutes, and a proxy
+        anywhere on the path may give up on a connection that has been silent
+        that long — which arrives looking like the model failed rather than the
+        transport. A streamed response puts bytes on the wire continuously, so
+        very long requests stop being at the mercy of whatever sits in between.
         """
         def _call():
             # The heartbeat comes from _retry_on_rate_limit, which wraps this.
@@ -645,9 +635,6 @@ def _validate(model_cls: type[BaseModel], raw: str) -> BaseModel:
 def build(spec: ModelSpec) -> Backend:
     if spec.provider == "anthropic":
         return AnthropicBackend(spec)
-    # The router speaks the same Responses API — files, structured output and
-    # server-side web search all work through it. Its chat-completions endpoint
-    # does none of those, which cost an afternoon before the other one was tried.
-    if spec.provider in ("openai", "monorouter"):
+    if spec.provider == "openai":
         return OpenAIBackend(spec)
     raise SystemExit(f"Unknown provider {spec.provider!r}")

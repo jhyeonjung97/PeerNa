@@ -168,30 +168,17 @@ who should have been let in.
 Key the account record on the verified address so a Google account can later
 attach to an existing one rather than starting a fresh free tier.
 
-## 7. Switch off the router — automatic, then check
+## 7. Check the direct path on Render
 
-`MONO_ROURTER_API_KEY` runs out at the end of August 2026, Korean time.
-`models.preferred()` turns every `r-` model into its direct equivalent from
-2026-08-31 15:00 UTC, which is midnight on the 1st in Seoul. Both the web form
-and the CLI go through it, so nothing needs changing at the moment it happens.
+The router is gone — out of the menu, the registry and the blueprint. A
+configuration that still names an `r-` model runs its direct equivalent, so
+nothing breaks, but the name should be changed where it is set.
 
-A date rather than a health check, because the failure cannot be detected any
-other way: an expired key is still a key, and only spending a request finds out.
-The date is known, so it is used.
+**Still to check:**
 
-**What to check on the 1st:**
-
-- A review actually completes on `luna`. That needs credit on the OpenAI
-  account, which had none as of the 30th.
-- `ANTHROPIC_API_KEY` is set on Render if the Claude models are wanted. They are
-  the only way to compare architecture against model without the router's
-  caveats.
-- The routed entries can stay in the registry. They cost nothing unused and
-  document what a middleman takes away.
-
-The direct path is where this was always going: one company between the
-manuscript and the model instead of two, and the only path that can run under a
-zero-retention agreement.
+- A review actually completes on `luna` on Render, with `OPENAI_API_KEY` set in
+  the dashboard and `MONO_ROURTER_API_KEY` deleted there.
+- `ANTHROPIC_API_KEY` is set on Render if the Claude models are wanted.
 
 ## 8. Smaller things
 

@@ -18,7 +18,6 @@ CONFIG_ENV = CONFIG_DIR / ".env"
 
 KEY_NAME = "ANTHROPIC_API_KEY"
 OPENAI_KEY_NAME = "OPENAI_API_KEY"
-ROUTER_KEY_NAME = "MONO_ROURTER_API_KEY"
 MODEL_NAME = "AI_PEER_REVIEWER_MODEL"
 
 #: Set when the account has a zero-retention agreement with its provider. The
@@ -29,7 +28,7 @@ ZERO_RETENTION = "AI_PEER_REVIEWER_ZERO_RETENTION"
 #: Settings the .env file may set. Anything else in the file is ignored.
 NOTIFY_KEYS = ("AI_PEER_REVIEWER_EMAIL", "SMTP_USER", "SMTP_PASSWORD",
                "SMTP_HOST", "SMTP_FROM")
-RECOGNISED = (KEY_NAME, OPENAI_KEY_NAME, ROUTER_KEY_NAME, MODEL_NAME,
+RECOGNISED = (KEY_NAME, OPENAI_KEY_NAME, MODEL_NAME,
               ZERO_RETENTION, *NOTIFY_KEYS)
 
 #: Path fragments that mean a directory is synced to somebody's cloud.
