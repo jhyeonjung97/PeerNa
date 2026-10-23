@@ -12,14 +12,19 @@ A judge from a different model family then marks each prediction against the
 real comments, with all thirty-six shuffled together and unlabelled, so it can
 neither favour an arm nor share the predictor's habits.
 
-The manuscript is the published version, so it already contains what the
-referees asked for. That flatters every arm equally and is why the absolute hit
-rate here is not a measure of anything; only the differences are.
+By default the manuscript is the published version, which already contains what
+the referees asked for — "we added ICP-MS" gives the request away. That flatters
+every arm, and the manuscript-alone arm most, since it is the arm that leans
+hardest on what the text gives away. --submitted runs the honest version: the
+manuscript as first submitted, from a Research Square "In Review" preprint, with
+the paper's own reviews still the answer key.
 
-    python -m tools.precedent_eval FULLTEXT_DIR OUT_DIR [--limit N]
+    python -m tools.precedent_eval MANUSCRIPTS OUT [--slugs FILE] [--submitted]
 
-FULLTEXT_DIR holds <slug>.txt for each held-out paper. Every stage is written to
-OUT_DIR as it finishes, so an interrupted run resumes where it stopped.
+MANUSCRIPTS holds <slug>.txt or <slug>.pdf for each test paper. Without --slugs
+the test papers are those missing from the paper index; with it, the listed
+ones, each kept out of its own search. Every stage is written to OUT as it
+finishes, so an interrupted run resumes where it stopped.
 """
 
 from __future__ import annotations
@@ -45,7 +50,10 @@ from ai_peer_reviewer.review import Reviewer
 ARMS = ("prior", "paper", "part")
 PREDICTIONS = 12
 PREDICTOR = "luna"
-JUDGE = "claude-sonnet-5"
+#: Another model family from the predictor, so it cannot favour its own habits.
+#: Thinking is off: the answer is one list of ids, and on Sonnet 5 the thinking
+#: alone ran past 16,000 output tokens a paper — most of the cost of judging.
+JUDGE = "claude-sonnet-5-5"
 
 #: The published text runs to 60–90k characters; the referees read the
 #: submitted one, so nothing past the main text is needed to guess at them.
@@ -57,6 +65,14 @@ the referees asked of it when it was first submitted: the {n} specific requests
 or criticisms most likely to appear in their reports — controls, measurements,
 analyses, comparisons, clarifications, claims they challenged. Be specific to this
 paper; a prediction that would fit any paper in the field is wasted.
+"""
+
+PREDICT_SUBMITTED = """\
+This manuscript is shown as it was submitted, before peer review. Predict what
+the referees will ask of it: the {n} specific requests or criticisms most likely
+to appear in their reports — controls, measurements, analyses, comparisons,
+clarifications, claims they will challenge. Be specific to this paper; a
+prediction that would fit any paper in the field is wasted.
 """
 
 MATERIAL = """\
@@ -102,13 +118,18 @@ def held_out() -> list[str]:
 def real_comments(slug: str) -> list[str]:
     connection = sqlite3.connect(corpus_index.DB_PATH)
     try:
+        # The answer key gets the same filter as the precedents: a reply the
+        # parser left in ("We have added ICP-MS data") would let a prediction
+        # match the authors rather than the referee.
         return [t for (t,) in connection.execute(
-            "SELECT text FROM comments WHERE slug = ? ORDER BY reviewer, position", (slug,))]
+            "SELECT text FROM comments WHERE slug = ? ORDER BY reviewer, position", (slug,))
+            if corpus_index.is_referee_comment(t)]
     finally:
         connection.close()
 
 
-def predict(slug: str, text: str, out: Path, lock: threading.Lock) -> dict:
+def predict(slug: str, text: str, out: Path, lock: threading.Lock,
+            question: str = PREDICT) -> dict:
     path = out / f"{slug}.predict.json"
     if path.is_file():
         return json.loads(path.read_text())
@@ -126,7 +147,7 @@ def predict(slug: str, text: str, out: Path, lock: threading.Lock) -> dict:
     }
     result["parts"] = reviewer.notes.get("parts", "")
     for arm in ARMS:
-        prompt = PREDICT.format(n=PREDICTIONS)
+        prompt = question.format(n=PREDICTIONS)
         if material[arm]:
             prompt += MATERIAL.format(material=material[arm][1])
             result[f"{arm}_sources"] = material[arm][2]
@@ -159,11 +180,10 @@ def judge(result: dict, out: Path, lock: threading.Lock) -> dict:
     random.Random(slug).shuffle(pool)
     predicted = "\n".join(f"P{i}. {p}" for i, (_, p) in enumerate(pool, 1))
 
-    # Streamed because the SDK refuses a request this large without it.
     with anthropic.Anthropic().messages.stream(
         model=JUDGE,
-        # Room for the model to think first; at 2000 the thinking alone used it up.
-        max_tokens=32000,
+        max_tokens=4000,
+        thinking={"type": "between_tools"},
         messages=[{"role": "user", "content": JUDGE_PROMPT.format(
             real="\n".join(real), predicted=predicted)}],
     ) as stream:
@@ -186,6 +206,22 @@ def judge(result: dict, out: Path, lock: threading.Lock) -> dict:
     with lock:
         print(f"  judged {slug}  {scored}", file=sys.stderr, flush=True)
     return verdict
+
+
+def manuscript_file(folder: Path, slug: str) -> Path | None:
+    for suffix in (".txt", ".pdf"):
+        if (folder / f"{slug}{suffix}").is_file():
+            return folder / f"{slug}{suffix}"
+    return None
+
+
+def read_manuscript(path: Path) -> str:
+    if path.suffix == ".txt":
+        return path.read_text()
+    import pymupdf
+
+    with pymupdf.open(path) as document:
+        return "\n\n".join(page.get_text() for page in document)
 
 
 def sign_test(wins: int, losses: int) -> float:
@@ -219,6 +255,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("out", type=Path)
     parser.add_argument("--limit", type=int, default=0)
     parser.add_argument("--workers", type=int, default=4)
+    parser.add_argument("--slugs", type=Path,
+                        help="File of test slugs, one per line, instead of the papers "
+                             "missing from the index.")
+    parser.add_argument("--submitted", action="store_true",
+                        help="The manuscripts are as submitted, not as published.")
     parser.add_argument("--db", type=Path,
                         help="Read this copy of the corpus database instead. A harvest "
                              "writing to the live one locks out readers.")
@@ -228,17 +269,19 @@ def main(argv: list[str] | None = None) -> int:
 
     config.load()
     args.out.mkdir(parents=True, exist_ok=True)
-    slugs = [s for s in held_out() if (args.fulltext / f"{s}.txt").is_file()]
+    wanted = args.slugs.read_text().split() if args.slugs else held_out()
+    slugs = [s for s in wanted if manuscript_file(args.fulltext, s)]
     if args.limit:
         slugs = slugs[: args.limit]
-    print(f"{len(slugs)} held-out papers with full text", file=sys.stderr)
+    question = PREDICT_SUBMITTED if args.submitted else PREDICT
+    print(f"{len(slugs)} test papers with a manuscript", file=sys.stderr)
 
     lock = threading.Lock()
 
     def one(slug: str) -> dict | None:
         try:
-            text = (args.fulltext / f"{slug}.txt").read_text()
-            return judge(predict(slug, text, args.out, lock), args.out, lock)
+            text = read_manuscript(manuscript_file(args.fulltext, slug))
+            return judge(predict(slug, text, args.out, lock, question), args.out, lock)
         except Exception as exc:  # one bad paper should not sink the run
             with lock:
                 print(f"  {slug} failed: {type(exc).__name__}: {exc}", file=sys.stderr, flush=True)
