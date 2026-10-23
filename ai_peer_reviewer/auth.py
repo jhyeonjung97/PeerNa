@@ -49,6 +49,26 @@ SESSION_DAYS = 30
 SECRET_PATH = Path.home() / ".cache" / "ai-peer-reviewer" / "session.key"
 
 
+#: Comma-separated addresses that may sign in at all. Unset, anyone with a Google
+#: account may. Set on the development server so it serves its operator and
+#: nobody else; it is the operator's key every review there spends.
+ONLY = "AI_PEER_REVIEWER_ONLY"
+
+
+def admitted(email: str | None) -> bool:
+    """Whether this signed-in address may use this server."""
+    import os
+
+    allowed = {a.strip().lower() for a in (os.environ.get(ONLY) or "").split(",") if a.strip()}
+    return bool(email) and (not allowed or email.lower() in allowed)
+
+
+def restricted() -> bool:
+    import os
+
+    return bool((os.environ.get(ONLY) or "").strip())
+
+
 def configured() -> bool:
     return bool(os.environ.get(CLIENT_ID) and os.environ.get(CLIENT_SECRET))
 

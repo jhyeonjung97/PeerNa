@@ -28,11 +28,14 @@ ZERO_RETENTION = "AI_PEER_REVIEWER_ZERO_RETENTION"
 #: Settings the .env file may set. Anything else in the file is ignored.
 NOTIFY_KEYS = ("AI_PEER_REVIEWER_EMAIL", "SMTP_USER", "SMTP_PASSWORD",
                "SMTP_HOST", "SMTP_FROM", "AI_PEER_REVIEWER_NOTIFY")
+#: Addresses that may sign in; see auth.ONLY.
+ONLY = "AI_PEER_REVIEWER_ONLY"
+
 #: The address Crossref is given with each reference lookup.
 CONTACT = "AI_PEER_REVIEWER_CONTACT"
 
 RECOGNISED = (KEY_NAME, OPENAI_KEY_NAME, MODEL_NAME,
-              ZERO_RETENTION, CONTACT, *NOTIFY_KEYS)
+              ZERO_RETENTION, CONTACT, ONLY, *NOTIFY_KEYS)
 
 #: Path fragments that mean a directory is synced to somebody's cloud.
 CLOUD_MARKERS = (

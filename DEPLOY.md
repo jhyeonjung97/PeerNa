@@ -96,25 +96,48 @@ There is one key now and it belongs to whoever runs the service, set in the
 platform's environment. Locally that is the `.env`, and the startup message
 names both the file and the variables when neither is there.
 
-## Pushing
+## Development and release
 
-    ./tests/deploy.sh
+Two services, two branches (`render.yaml`):
 
-Checks whether a review is running before it pushes, then runs the tests and
-pushes. A deploy replaces the instance and a review runs for minutes in a
-background thread of the old one, so it dies — the checkpoint means the work
-survives and the same manuscript resumes where it stopped, but somebody is
-watching a progress bar that suddenly reports the server stopped. Render's
-shutdown grace period is far shorter than a review, so draining is not an
-option; asking is.
+| | branch | deploys | who can sign in |
+|---|---|---|---|
+| `peerna` | `main` | only on release | anyone |
+| `peerna-dev` (free plan) | `dev` | every push | the accounts in `AI_PEER_REVIEWER_ONLY` |
 
-`./tests/run.sh` on its own
+Work happens on `dev`:
 
-Compiles the package, then checks two things that have each shipped broken: a
-name read but never bound, and a path the page calls that the server does not
-answer. Both came from deleting code that sat next to code being deleted, and
-neither broke an import or a start-up — they reached the deployed service and
-were found by using it.
+    ./tests/deploy.sh      # tests, then push dev; peerna-dev rebuilds
+
+A release is made only when the operator asks for one:
+
+    ./tests/release.sh     # tests on 3.10 and 3.12, asks if a review is running,
+                           # pushes dev to main, starts the real deploy
+
+`peerna` has autoDeploy off, so a push to `main` on its own deploys nothing.
+The release script triggers the deploy through a Render deploy hook if
+`RENDER_DEPLOY_HOOK=` is set in `~/.config/ai-peer-reviewer/.env`
+(peerna → Settings → Deploy Hook); otherwise it says to press Manual Deploy.
+
+### Setting up peerna-dev
+
+1. Sync the Blueprint in the Render dashboard; it offers to create peerna-dev.
+2. In peerna-dev → Environment set `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`,
+   `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `AI_PEER_REVIEWER_CONTACT`,
+   and `AI_PEER_REVIEWER_ONLY` and `AI_PEER_REVIEWER_UNLIMITED` to the
+   operator's address.
+3. In Google Cloud Console → APIs & Services → Credentials → the OAuth client,
+   add `https://peerna-dev.onrender.com/auth/callback` to the authorised
+   redirect URIs. Without it Google refuses the sign-in.
+
+With `AI_PEER_REVIEWER_ONLY` set and the Google settings missing, the server
+admits nobody rather than everybody: on any server without Google settings the
+visitor is treated as the local operator, which on a development server would
+let anyone spend the key.
+
+The free plan has no disk, so reviews on peerna-dev do not survive a restart
+and there is no corpus index there. Work that needs the corpus is tried on the
+laptop.
 
 ## Free reviews
 

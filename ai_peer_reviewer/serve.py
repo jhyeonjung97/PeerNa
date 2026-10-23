@@ -470,10 +470,16 @@ class Handler(BaseHTTPRequestHandler):
         making them sign in to reach their own laptop would be theatre.
         """
         if not HOSTED or not auth.configured():
+            # A server restricted to named accounts that cannot check accounts
+            # serves nobody, rather than everybody: without this, a development
+            # server missing its Google settings would spend its key for anyone.
+            if HOSTED and auth.restricted():
+                return None
             return LOCAL_VIEWER
         cookies = SimpleCookie(self.headers.get("Cookie") or "")
         morsel = cookies.get(auth.COOKIE)
-        return auth.read(morsel.value if morsel else None)
+        email = auth.read(morsel.value if morsel else None)
+        return email if auth.admitted(email) else None
 
     def _may_see(self, job: dict) -> bool:
         """Whether the caller may read this review.
@@ -553,6 +559,8 @@ class Handler(BaseHTTPRequestHandler):
             email = auth.exchange(query.get("code", [""])[0], self._redirect_uri())
             if not email:
                 return self._json(400, {"error": "Google did not confirm that account."})
+            if not auth.admitted(email):
+                return self._json(403, {"error": "This server is not open to that account."})
 
             session = (
                 f"{auth.COOKIE}={auth.issue(email)}; Path=/; HttpOnly; "
