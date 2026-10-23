@@ -132,6 +132,10 @@ class Reviewer:
         self.use_web_search = use_web_search
         self.checkpoint = checkpoint
         self.notes: dict[str, str] = {}
+        #: A corpus paper to keep out of the precedent search. Only testing sets
+        #: it: a manuscript that is in the corpus would otherwise be handed its
+        #: own referees' comments as precedent.
+        self.exclude = ""
         #: The supplementary PDF, when the author supplied one. Only the
         #: consistency checks read it.
         self.supplementary: "Path | None" = None
@@ -199,9 +203,9 @@ class Reviewer:
         complete without it, just without the field-specific layer.
         """
         try:
-            found = self.precedents_by_part(manuscript)
+            found = self.precedents_by_part(manuscript, self.exclude)
             if found is None:
-                found = self.precedents_by_paper(manuscript)
+                found = self.precedents_by_paper(manuscript, self.exclude)
         except Exception as exc:
             self.backend.warnings.append(
                 f"Could not consult the corpus index ({type(exc).__name__}); "
