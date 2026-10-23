@@ -191,8 +191,22 @@ def _recent_jobs(limit: int = 15) -> list[dict]:
             "stage": data.get("stage"),
             "started_at": data.get("started_at"),
             "duration": data.get("duration"),
+            # The listing is filtered on this. Left out, every row compared as
+            # ownerless, and a hosted server listed nobody's reviews — finished
+            # or running — while a local one, which shows ownerless rows, looked
+            # fine.
+            "owner": data.get("owner"),
         })
     return rows
+
+
+def _visible_to(viewer: str | None, rows: list[dict], hosted: bool) -> list[dict]:
+    """The rows this viewer may see. Reviews run before sign-in existed have no
+    owner: on a local run they are the operator's own and belong in the list; on
+    a shared one there is no way to tell whose they were, so they stay hidden."""
+    if viewer is None:
+        return []
+    return [r for r in rows if r.get("owner") == viewer or (not hosted and not r.get("owner"))]
 
 
 def _job(job_id: str) -> dict | None:
@@ -582,13 +596,7 @@ class Handler(BaseHTTPRequestHandler):
             viewer = self._viewer()
             if viewer is None:
                 return self._json(200, {"jobs": [], "signedOut": True})
-            # Reviews run before sign-in existed have no owner. On a local run
-            # they are the operator's own and belong in the list; on a shared
-            # one there is no way to tell whose they were, so they stay hidden.
-            return self._json(200, {"jobs": [
-                job for job in _recent_jobs()
-                if job.get("owner") == viewer or (not HOSTED and not job.get("owner"))
-            ]})
+            return self._json(200, {"jobs": _visible_to(viewer, _recent_jobs(), HOSTED)})
 
         if path.startswith("/api/download/"):
             job_id = path.rsplit("/", 1)[-1]
