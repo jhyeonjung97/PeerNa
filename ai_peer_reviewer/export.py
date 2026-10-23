@@ -242,7 +242,7 @@ def _watermark(document) -> None:
 
 def to_docx(report: RefereeReport, manuscript_name: str, model_label: str,
             warnings: list[str] | None = None, web_search: bool | None = None,
-            finished_at: float | None = None) -> bytes | None:
+            finished_at: float | None = None, sources: str = "") -> bytes | None:
     """Build a Word document from the report itself, not from its HTML."""
     try:
         import docx
@@ -289,37 +289,40 @@ def to_docx(report: RefereeReport, manuscript_name: str, model_label: str,
         paragraph.add_run(f"{index}. ").bold = True
         paragraph.add_run(comment.text.strip())
 
-    document.add_page_break()
+    # With web search off every check would read "unverified", and the line
+    # at the foot already says search was off; see render._citations_were_searched.
+    if web_search is not False:
+        document.add_page_break()
 
-    citations = document.add_paragraph()
-    citations.add_run("Citations checked").bold = True
+        citations = document.add_paragraph()
+        citations.add_run("Citations checked").bold = True
 
-    note = document.add_paragraph(_coverage_line(report))
-    note.runs[0].italic = True
-    note.runs[0].font.size = Pt(9.5)
+        note = document.add_paragraph(_coverage_line(report))
+        note.runs[0].italic = True
+        note.runs[0].font.size = Pt(9.5)
 
-    for check in report.citation_checks:
-        paragraph = document.add_paragraph(style="List Bullet")
-        label = paragraph.add_run(
-            f"[{STATUS_LABELS.get(check.status, check.status)}] "
-        )
-        label.bold = True
-        if check.status != "verified":
-            label.font.color.rgb = RGBColor(0xA0, 0x2C, 0x2C)
-        paragraph.add_run(f"{check.reference} — {check.location}")
-        if check.note.strip():
-            detail = document.add_paragraph(check.note.strip())
-            detail.paragraph_format.left_indent = Pt(36)  # under the bullet's text
-            detail.runs[0].font.size = Pt(10)
+        for check in report.citation_checks:
+            paragraph = document.add_paragraph(style="List Bullet")
+            label = paragraph.add_run(
+                f"[{STATUS_LABELS.get(check.status, check.status)}] "
+            )
+            label.bold = True
+            if check.status != "verified":
+                label.font.color.rgb = RGBColor(0xA0, 0x2C, 0x2C)
+            paragraph.add_run(f"{check.reference} — {check.location}")
+            if check.note.strip():
+                detail = document.add_paragraph(check.note.strip())
+                detail.paragraph_format.left_indent = Pt(36)  # under the bullet's text
+                detail.runs[0].font.size = Pt(10)
 
-    for line in (f"Reviewer confidence: {report.confidence}.", ""):
-        if line:
-            document.add_paragraph(line).runs[0].italic = True
-
+    if warnings:
+        document.add_paragraph().add_run("Run warnings").bold = True
     for warning in dict.fromkeys(warnings or []):
-        entry = document.add_paragraph(warning)
+        entry = document.add_paragraph(warning, style="List Bullet")
         entry.runs[0].font.size = Pt(9.5)
         entry.runs[0].font.color.rgb = RGBColor(0xA0, 0x2C, 0x2C)
+
+    document.add_paragraph(f"Reviewer confidence: {report.confidence}.").runs[0].italic = True
 
     from .render import provenance
 
@@ -332,6 +335,22 @@ def to_docx(report: RefereeReport, manuscript_name: str, model_label: str,
         footer.alignment = WD_ALIGN_PARAGRAPH.LEFT
         if before is not None:
             footer.paragraph_format.space_before = before
+
+    # The corpus papers the precedents came from. The page and the PDF carried
+    # this credit and Word did not, though CC BY asks for it wherever the
+    # comments it shaped are passed on.
+    from .render import PRECEDENT_CREDIT
+
+    credits = [line.strip() for line in (sources or "").splitlines() if line.strip()]
+    if credits:
+        head = document.add_paragraph(PRECEDENT_CREDIT)
+        head.runs[0].font.size = Pt(9)
+        head.runs[0].font.color.rgb = RGBColor(0x6B, 0x65, 0x60)
+        head.paragraph_format.space_before = Pt(6)
+        for line in credits:
+            item = document.add_paragraph(line, style="List Bullet")
+            item.runs[0].font.size = Pt(8.5)
+            item.runs[0].font.color.rgb = RGBColor(0x6B, 0x65, 0x60)
 
     buffer = tempfile.NamedTemporaryFile(suffix=".docx", delete=False)
     buffer.close()

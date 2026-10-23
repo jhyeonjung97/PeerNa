@@ -130,14 +130,22 @@ def _appendix_lines(report: RefereeReport, result: ReviewResult, model_label: st
     as part of the review would misrepresent what it is, and burying it as a
     footnote would waste the one thing here a human reviewer rarely does.
     """
-    lines = ["---", "", "**Citations checked**", "", _coverage_line(report), ""]
-    if report.citation_checks:
+    lines = ["---", ""]
+    if _citations_were_searched(result):
+        lines += ["**Citations checked**", "", _coverage_line(report), ""]
+    if _citations_were_searched(result) and report.citation_checks:
         for check in report.citation_checks:
             status = STATUS_LABELS.get(check.status, check.status)
             entry = f"- **[{status}]** {check.reference} — {check.location}"
             if check.note.strip():
                 entry += f"\n  - {check.note.strip()}"
             lines.append(entry)
+        lines.append("")
+    lines += [
+    ]
+    if result.warnings:
+        lines += ["**Run warnings**", ""]
+        lines += [f"- {w}" for w in dict.fromkeys(result.warnings)]
         lines.append("")
     lines += [
         f"_Reviewer confidence: {report.confidence}._",
@@ -148,10 +156,6 @@ def _appendix_lines(report: RefereeReport, result: ReviewResult, model_label: st
         "",
     ]
     lines += _credit_lines(result)
-    if result.warnings:
-        lines += ["", "**Run warnings**", ""]
-        lines += [f"- {w}" for w in dict.fromkeys(result.warnings)]
-        lines.append("")
     return lines
 
 
@@ -377,11 +381,14 @@ def render_html(
 
     # The comments are the report; what follows is how it was checked. In print
     # the appendix starts a page of its own, as it does in the Word file.
-    out.append(PAGE_BREAK)
+    checked = _citations_were_searched(result)
+    if checked:
+        out.append(PAGE_BREAK)
     out.append('<section class="appendix">')
-    out.append("<h2>Citations checked</h2>")
-    out.append(f'<p class="note">{e(_coverage_line(report))}</p>')
-    if report.citation_checks:
+    if checked:
+        out.append("<h2>Citations checked</h2>")
+        out.append(f'<p class="note">{e(_coverage_line(report))}</p>')
+    if checked and report.citation_checks:
         out.append('<ul class="citations">')
         for check in report.citation_checks:
             label = STATUS_LABELS.get(check.status, check.status)
@@ -396,14 +403,12 @@ def render_html(
             out.append("</li>")
         out.append("</ul>")
 
-    out.append(
-        f'<p class="verdictLine">Reviewer confidence: {e(report.confidence)}</p>'
-    )
-
+    # How the run went, then how sure it was, then what made it.
     if result.warnings:
         out.append("<h2>Run warnings</h2><ul>")
         out.extend(f"<li>{e(w)}</li>" for w in dict.fromkeys(result.warnings))
         out.append("</ul>")
+    out.append(f'<p class="verdictLine">Reviewer confidence: {e(report.confidence)}</p>')
 
     out.append(f'<p class="disclosure">{e(AI_DISCLOSURE)}</p>')
     out.append(f'<p class="disclosure provenance">'
@@ -418,6 +423,17 @@ def render_html(
     out.append("</section>")
     out.append("</main></body></html>")
     return "\n".join(out)
+
+
+def _citations_were_searched(result: ReviewResult) -> bool:
+    """Whether the report has a citation section worth printing.
+
+    With web search off nothing could be checked, so every entry would read
+    "unverified — no external search was run". The line at the foot already
+    says search was off. Unknown, for reports older than that line, keeps the
+    section as it always was.
+    """
+    return result.web_search is not False
 
 
 def _credit_sources(result: ReviewResult) -> list[str]:

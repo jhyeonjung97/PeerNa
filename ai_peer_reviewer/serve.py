@@ -322,6 +322,8 @@ def convert(job: dict, fmt: str) -> bytes | None:
             job.get("warnings", []),
             web_search=job.get("web_search"),
             finished_at=(job.get("started_at") or 0) + (job.get("duration") or 0) or None,
+            sources=(_result_of(job).pass_notes.get("precedent_sources", "")
+                     if _result_of(job) else ""),
         )
     return None
 
