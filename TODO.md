@@ -126,12 +126,13 @@ In order:
    Web search stays off (it finds the published paper). About $28. Report the
    field subset and the years separately: the papers are from 2020 to 2026 and
    the predictor may have read the older ones.
-4. **Decide.** If part by part wins, merge `method-level-precedent` and put the
-   comment index on the Render disk. Ship the database without `review_text`:
-   the raw review files are about 70% of it and are only needed to re-parse,
-   which happens here. Estimated after the harvest: about 0.4 GB of database and
-   0.5 GB of vectors against the 2 GB disk, where the full database alone would
-   be about 1.2 GB. If nothing wins, the retrieval needs
+4. **Decide.** If part by part wins, merge `method-level-precedent` and point
+   the production server at the corpus release (`AI_PEER_REVIEWER_CORPUS`,
+   DEPLOY: The corpus index). `corpus-2026-10` is published: 11,797 papers and
+   330,146 comment vectors, 450 MB packed, fetched in about 25 s and searched
+   in 256 MB of memory. The whole-journal harvest started 2026-10-23
+   (`harvest-2026-10-all/`) will roughly quadruple it; re-index and publish a
+   new tag when it finishes. If nothing wins, the retrieval needs
    rethinking before anything else is built on it.
 
 Both arms of the old 20-paper test hit about a third, and the pilot about a
