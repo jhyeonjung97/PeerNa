@@ -23,6 +23,14 @@ LOGO_PATH = Path(__file__).parent / "web" / "logo.svg"
 #: against the light page and the dark one at the opacity it is drawn at.
 WATERMARK_INK = "#8a827a"
 
+#: Where the printed report turns the page. An empty element rather than CSS
+#: alone, because PyMuPDF's HTML layout ignores break-before and splits here.
+PAGE_BREAK = '<div class="page-break" aria-hidden="true"></div>'
+
+#: The watermark as PyMuPDF draws it: the mark is opaque there, so its ink is
+#: the print opacity (6%) already mixed into white.
+WATERMARK_PRINT_INK = "#f7f7f6"
+
 
 @lru_cache(maxsize=None)
 def _logo(colour: str | None = None) -> str:
@@ -33,6 +41,25 @@ def _logo(colour: str | None = None) -> str:
 
 def _logo_data_uri() -> str:
     return "url(\"data:image/svg+xml," + urllib.parse.quote(_logo(WATERMARK_INK)) + "\")"
+
+
+def provenance(model_label: str, web_search: bool | None = None,
+               finished_at: float | None = None) -> str:
+    """When the report was made, with what, and whether it could search.
+
+    No account: a report is passed to co-authors as it is, and an address in it
+    would travel with it. The listing on the site already says whose it was.
+    """
+    from datetime import datetime, timezone
+
+    parts = []
+    if finished_at:
+        when = datetime.fromtimestamp(finished_at, tz=timezone.utc)
+        parts.append(f"Generated {when:%Y-%m-%d %H:%M} UTC")
+    parts.append(f"Model: {model_label}")
+    if web_search is not None:
+        parts.append(f"Web search: {'on' if web_search else 'off'}")
+    return " · ".join(parts)
 
 
 RECOMMENDATION_LABELS = {
@@ -115,7 +142,9 @@ def _appendix_lines(report: RefereeReport, result: ReviewResult, model_label: st
     lines += [
         f"_Reviewer confidence: {report.confidence}._",
         "",
-        f"_{AI_DISCLOSURE} Model: {model_label}._",
+        f"_{AI_DISCLOSURE}_",
+        "",
+        f"_{provenance(model_label, result.web_search, result.finished_at)}_",
         "",
     ]
     lines += _credit_lines(result)
@@ -304,6 +333,7 @@ footer {
     -webkit-print-color-adjust: exact; print-color-adjust: exact;
   }
   .concern, .citation, .verdict { break-inside: avoid; }
+  .appendix { break-before: page; }
   h2 { break-after: avoid; }
   footer { break-before: avoid; }
 }
@@ -328,7 +358,10 @@ def render_html(
 
     out.append('<div class="watermark" aria-hidden="true"></div>')
     out.append(f"<header><h1>{e(title)}</h1>")
-    out.append(f'<p class="wordmark">{_logo()}<span>PeerNa</span></p>')
+    # Sized on the element as well as in CSS: PyMuPDF's layout ignores the CSS
+    # and drew the mark at its full 64-unit size above the report.
+    mark = _logo().replace("<svg ", '<svg width="17" height="17" ', 1)
+    out.append(f'<p class="wordmark">{mark}<span>PeerNa</span></p>')
     out.append("</header>")
 
     call = RECOMMENDATION_LABELS.get(report.recommendation, report.recommendation)
@@ -340,6 +373,9 @@ def render_html(
         out.append(f'<li class="{comment.severity}">{e(comment.text.strip())}</li>')
     out.append("</ol>")
 
+    # The comments are the report; what follows is how it was checked. In print
+    # the appendix starts a page of its own, as it does in the Word file.
+    out.append(PAGE_BREAK)
     out.append('<section class="appendix">')
     out.append("<h2>Citations checked</h2>")
     out.append(f'<p class="note">{e(_coverage_line(report))}</p>')
@@ -365,7 +401,8 @@ def render_html(
         out.extend(f"<li>{e(w)}</li>" for w in dict.fromkeys(result.warnings))
         out.append("</ul>")
 
-    out.append(f'<p class="disclosure">{e(AI_DISCLOSURE)} Model: {e(model_label)}.</p>')
+    out.append(f'<p class="disclosure">{e(AI_DISCLOSURE)}<br>'
+               f'{e(provenance(model_label, result.web_search, result.finished_at))}</p>')
     sources = _credit_sources(result)
     if sources:
         out.append(f'<p class="disclosure">{e(PRECEDENT_CREDIT)}</p>')

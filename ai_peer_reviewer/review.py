@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -101,6 +102,11 @@ class ReviewResult:
     pass_notes: dict[str, str]
     usage: Usage
     warnings: list[str] = field(default_factory=list)
+    #: For the line at the foot of the report: when it was made, and whether
+    #: the literature pass could search. Left None by anything that builds a
+    #: result by hand, and the line then leaves them out.
+    web_search: bool | None = None
+    finished_at: float | None = None
 
 
 class Reviewer:
@@ -569,6 +575,8 @@ class Reviewer:
             pass_notes=dict(self.notes),
             usage=usage,
             warnings=warnings,
+            web_search=self.use_web_search,
+            finished_at=time.time(),
         )
 
 

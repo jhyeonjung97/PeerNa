@@ -259,6 +259,8 @@ def convert(job: dict, fmt: str) -> bytes | None:
             job.get("filename", "manuscript"),
             job.get("model_label", ""),
             job.get("warnings", []),
+            web_search=job.get("web_search"),
+            finished_at=(job.get("started_at") or 0) + (job.get("duration") or 0) or None,
         )
     return None
 

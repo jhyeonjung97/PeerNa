@@ -46,7 +46,37 @@ def to_pdf(html_text: str) -> bytes | None:
     simpler than a browser's, which costs some typography and nothing else.
     """
     printed = _print_pdf(html_text)
-    return printed if printed is not None else _layout_pdf(html_text)
+    data = printed if printed is not None else _layout_pdf(html_text)
+    return _number_pages(data) if data else None
+
+
+def _number_pages(data: bytes) -> bytes:
+    """"n / N" at the foot of every page, whichever route made the PDF."""
+    try:
+        import pymupdf
+
+        document = pymupdf.open("pdf", data)
+        total = document.page_count
+        for number, page in enumerate(document, 1):
+            label = f"{number} / {total}"
+            size = 8
+            width = pymupdf.get_text_length(label, fontname="helv", fontsize=size)
+            page.insert_text(((page.rect.width - width) / 2, page.rect.height - 28),
+                             label, fontname="helv", fontsize=size, color=(0.45, 0.45, 0.45))
+        return document.tobytes(garbage=3, deflate=True)
+    except Exception:  # noqa: BLE001 - an unnumbered PDF beats no PDF
+        return data
+
+
+PRINT_SPACING = (
+    "<style>"
+    "li { margin-bottom: 4pt; }"
+    "ol.comments li { margin-bottom: 9pt; }"
+    "ol.comments { margin-bottom: 18pt; }"
+    "h2 { margin-top: 16pt; margin-bottom: 6pt; }"
+    "p { margin-bottom: 6pt; }"
+    "</style>"
+)
 
 
 def _layout_pdf(html_text: str) -> bytes | None:
@@ -55,19 +85,44 @@ def _layout_pdf(html_text: str) -> bytes | None:
     try:
         import pymupdf
 
+        from .render import PAGE_BREAK, WATERMARK_PRINT_INK, _logo
+
+        # Each piece after a break starts a fresh page. The pieces share the
+        # document head, so the styles carry over; the parser closes whatever
+        # tags a cut leaves open.
+        # The stylesheet spaces things in rem, which this layout does not size;
+        # the same spacing again in points, for it alone.
+        html_text = html_text.replace("</head>", PRINT_SPACING + "</head>", 1)
+        head = html_text[: html_text.find("<main>") + len("<main>")] if "<main>" in html_text else ""
+        pieces = html_text.split(PAGE_BREAK)
+        pieces = [pieces[0]] + [head + piece for piece in pieces[1:]]
+
         buffer = io.BytesIO()
         writer = pymupdf.DocumentWriter(buffer)
-        story = pymupdf.Story(html=html_text)
         page = pymupdf.paper_rect("a4")
         body = page + (54, 54, -54, -54)  # three-quarter-inch margins
-        more = True
-        while more:
-            device = writer.begin_page(page)
-            more, _ = story.place(body)
-            story.draw(device)
-            writer.end_page()
+        for piece in pieces:
+            story = pymupdf.Story(html=piece)
+            more = True
+            while more:
+                device = writer.begin_page(page)
+                more, _ = story.place(body)
+                story.draw(device)
+                writer.end_page()
         writer.close()
-        data = buffer.getvalue()
+
+        # The CSS watermark is a background image, which this layout does not
+        # draw, so the mark goes behind each page afterwards.
+        document = pymupdf.open("pdf", buffer.getvalue())
+        mark = pymupdf.open(stream=_logo(WATERMARK_PRINT_INK).encode(), filetype="svg")
+        mark_pdf = pymupdf.open("pdf", mark.convert_to_pdf())
+        side = 7 / 2.54 * 72  # 7 cm, as in the print stylesheet
+        for p in document:
+            centre = p.rect.width / 2, p.rect.height / 2
+            box = pymupdf.Rect(centre[0] - side / 2, centre[1] - side / 2,
+                               centre[0] + side / 2, centre[1] + side / 2)
+            p.show_pdf_page(box, mark_pdf, 0, overlay=False)
+        data = document.tobytes(garbage=3, deflate=True)
         return data or None
     except Exception:  # noqa: BLE001 - a failed export must not fail the request
         return None
@@ -145,6 +200,30 @@ WATERMARK_XML = """<w:p xmlns:w="http://schemas.openxmlformats.org/wordprocessin
 </w:p>"""
 
 
+def _page_numbers(document) -> None:
+    """A centred PAGE field in each footer. python-docx has no API for fields."""
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+    from docx.shared import Pt, RGBColor
+
+    for section in document.sections:
+        paragraph = section.footer.paragraphs[0]
+        paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        run = paragraph.add_run()
+        run.font.size = Pt(8)
+        run.font.color.rgb = RGBColor(0x73, 0x73, 0x73)
+        for kind, text in (("begin", None), (None, "PAGE"), ("end", None)):
+            if kind:
+                element = OxmlElement("w:fldChar")
+                element.set(qn("w:fldCharType"), kind)
+            else:
+                element = OxmlElement("w:instrText")
+                element.set(qn("xml:space"), "preserve")
+                element.text = text
+            run._r.append(element)
+
+
 def _watermark(document) -> None:
     """Put the PeerNa mark behind every page."""
     from docx.oxml import parse_xml
@@ -160,7 +239,8 @@ def _watermark(document) -> None:
 
 
 def to_docx(report: RefereeReport, manuscript_name: str, model_label: str,
-            warnings: list[str] | None = None) -> bytes | None:
+            warnings: list[str] | None = None, web_search: bool | None = None,
+            finished_at: float | None = None) -> bytes | None:
     """Build a Word document from the report itself, not from its HTML."""
     try:
         import docx
@@ -177,6 +257,7 @@ def to_docx(report: RefereeReport, manuscript_name: str, model_label: str,
     normal.paragraph_format.space_after = Pt(8)
 
     _watermark(document)
+    _page_numbers(document)
 
     mark = document.add_paragraph()
     mark_run = mark.add_run("PeerNa")
@@ -239,7 +320,10 @@ def to_docx(report: RefereeReport, manuscript_name: str, model_label: str,
         entry.runs[0].font.size = Pt(9.5)
         entry.runs[0].font.color.rgb = RGBColor(0xA0, 0x2C, 0x2C)
 
-    footer = document.add_paragraph(f"{AI_DISCLOSURE} Model: {model_label}.")
+    from .render import provenance
+
+    footer = document.add_paragraph(
+        f"{AI_DISCLOSURE} {provenance(model_label, web_search, finished_at)}")
     footer.runs[0].font.size = Pt(9)
     footer.runs[0].font.color.rgb = RGBColor(0x6B, 0x65, 0x60)
     footer.alignment = WD_ALIGN_PARAGRAPH.LEFT
