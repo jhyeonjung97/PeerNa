@@ -545,6 +545,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._serve_file(WEB_ROOT / "logo.svg")
 
         if path == "/api/models":
+            viewer = self._viewer()
             return self._json(
                 200,
                 {
@@ -561,6 +562,7 @@ class Handler(BaseHTTPRequestHandler):
                             "ready": config.has_credentials(
                                 models.REGISTRY[name].provider
                             ),
+                            "allowed": quota.allowed(viewer, models.REGISTRY[name]),
                             "hint": config.key_hint(
                                 models.REGISTRY[name].provider
                             ),
@@ -730,6 +732,12 @@ class Handler(BaseHTTPRequestHandler):
                 })
             asked = payload.get("model") or config.configured_model() or models.DEFAULT_MODEL
             spec = models.resolve(models.preferred(asked))
+            if not quota.allowed(viewer, spec):
+                # Checked here as well as greyed out in the menu: the menu is a
+                # convenience, and a request can name any model it likes.
+                return self._json(403, {
+                    "error": f"{spec.label} is not available on free reviews.",
+                })
 
             if not config.has_credentials(spec.provider):
                 env = models.CREDENTIAL_ENV[spec.provider]

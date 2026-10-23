@@ -415,7 +415,8 @@ function startSignIn(e) {
   if (!popup) { location.href = "/auth/login?agreed=1"; return; }
   // Some browsers close the window without the message ever arriving, so the
   // poll is what actually ends this; the message only makes it quick.
-  const done = () => { clearInterval(watch); loadAccount(); loadHistory(); };
+  // The menu depends on who is signed in: a free account cannot pick Fable.
+  const done = () => { clearInterval(watch); loadAccount(); loadHistory(); loadModels(); };
   const watch = setInterval(() => { if (popup.closed) done(); }, 500);
   window.addEventListener("message", function once(ev) {
     if (ev.origin === location.origin && ev.data === "peerna:signed-in") {
@@ -448,15 +449,16 @@ function loadModels(keep) {
     for (const m of d.models) {
       const o = document.createElement("option");
       o.value = m.key;
-      o.textContent = `${m.label}${m.ready ? "" : "  (no API key)"}`;
-      o.disabled = !m.ready;
+      o.textContent = `${m.label}` +
+        (!m.ready ? "  (no API key)" : m.allowed === false ? "  (not on free reviews)" : "");
+      o.disabled = !m.ready || m.allowed === false;
       o.title = m.caution ? `${m.note}\n\n${m.caution}` : m.note;
-      if (m.key === want) o.selected = true;
+      if (m.key === want && !o.disabled) o.selected = true;
       $("model").append(o);
     }
     showCaution();
     if ($("model").selectedIndex < 0) {
-      const first = d.models.find(m => m.ready);
+      const first = d.models.find(m => m.ready && m.allowed !== false);
       if (first) $("model").value = first.key;
     }
   });

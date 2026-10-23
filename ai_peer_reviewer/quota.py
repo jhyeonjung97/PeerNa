@@ -46,6 +46,22 @@ def exempt(email: str | None) -> bool:
     return email in LOCAL or (email or "").lower() in UNLIMITED
 
 
+#: Models a free review may not use. Fable costs about $2 a paper against
+#: Luna's ten cents, so three free reviews on it would be $6 an account — sixty
+#: times the allowance the free tier was priced on. The other Claude models stay
+#: open: Opus, the dearest of them, is a third of Fable.
+PAID_ONLY = {"fable"}
+
+
+def allowed(email: str | None, spec) -> bool:
+    """Whether this account may run a review on this model."""
+    from .models import REGISTRY
+
+    if exempt(email):
+        return True
+    return spec.id not in {REGISTRY[name].id for name in PAID_ONLY}
+
+
 def _read() -> dict[str, int]:
     try:
         data = json.loads(PATH.read_text(encoding="utf-8"))
