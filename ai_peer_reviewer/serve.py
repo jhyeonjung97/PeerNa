@@ -620,6 +620,10 @@ class Handler(BaseHTTPRequestHandler):
                 200 if healthy else 503,
                 {
                     "ok": healthy,
+                    # Which build answers: Render sets this on every deploy. With
+                    # two services from one repository, it is how to tell what
+                    # each is running.
+                    "commit": (os.environ.get("RENDER_GIT_COMMIT") or "")[:7] or None,
                     "models": reviews,
                     "running": sum(
                         1 for job in JOBS.values() if job.get("status") == "running"
