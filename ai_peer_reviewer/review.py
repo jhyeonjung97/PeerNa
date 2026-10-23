@@ -84,7 +84,13 @@ CONCURRENCY = 2
 #: recover from a wrong comment count, which does happen, without paying for
 #: draws that do not help.
 CONDENSE_ATTEMPTS = 2
-CONDENSE_TARGET_WORDS = 45  # the corpus median is 42
+
+#: Effort for the cutting pass. Measured on one draft (15 comments, median 89
+#: words), two runs each: high effort with a retry whenever the median stayed
+#: above the target took 70 s and 62 s and left medians of 77 and 70; medium,
+#: once, took 14 s and 15 s and left 63 and 61. Rewriting to a length is not a
+#: reasoning problem, and the extra thought went into keeping words.
+CONDENSE_EFFORT = "medium"
 
 #: What a review does after the lenses, in order. Named here rather than counted
 #: at each call site: the count was written out in two places and they had
@@ -529,6 +535,7 @@ class Reviewer:
                     [],
                     f"{instruction}{reminder}\n\n{drafted}",
                     RefereeReport,
+                    effort=CONDENSE_EFFORT,
                 )
             except Exception as exc:  # noqa: BLE001 - see the docstring
                 self.backend.note(f"Could not shorten the comments ({exc}); kept the draft.")
@@ -540,10 +547,11 @@ class Reviewer:
             if len(shorter.comments) != expected:
                 continue
 
-            if best is None or _median_words(shorter) < _median_words(best):
-                best = shorter
-            if _median_words(best) <= CONDENSE_TARGET_WORDS:
-                break
+            # A second attempt is for a wrong count only. Retrying to get under
+            # the length target cost another minute and, at high effort, came
+            # back no shorter (see CONDENSE_EFFORT).
+            best = shorter
+            break
 
         if best is None:
             self.backend.note(
@@ -580,6 +588,14 @@ class Reviewer:
                 finished = done
             progress(finished, total, label)
 
+        # Set when the first text-only lens is done, so the manuscript's text is
+        # in the provider's cache; the precedent pass, which reads the same
+        # text, waits for it rather than for a lens slot.
+        text_cached = threading.Event()
+        first_text_lens = next((p.key for p in PASSES if not p.needs_figures), None)
+        if first_text_lens is None:
+            text_cached.set()  # nothing to wait for; never hang on it
+
         def one(review_pass: Pass) -> None:
             nonlocal done
             with self._lock:
@@ -590,6 +606,8 @@ class Reviewer:
                 self.run_pass(manuscript, review_pass)
             finally:
                 timings[f"  {review_pass.title}"] = round(time.monotonic() - began, 1)
+                if review_pass.key == first_text_lens:
+                    text_cached.set()
                 with self._lock:
                     if review_pass.title in running:
                         running.remove(review_pass.title)
@@ -613,6 +631,7 @@ class Reviewer:
 
         def precedents() -> None:
             nonlocal done
+            text_cached.wait()
             with self._lock:
                 running.append("Field expectations")
             announce()
@@ -635,16 +654,19 @@ class Reviewer:
         # Everything before consolidation is independent of everything else in
         # it, so none of it waits on the rest. The consistency checks are mostly
         # Crossref round trips and take their own thread from the start. The
-        # precedent pass queues behind the lenses for the same two model slots:
-        # by the time one frees, a lens has written the manuscript into the
-        # cache, and a third simultaneous request would only re-read it cold.
-        # Run in sequence these stages added about two minutes to every review.
-        with ThreadPoolExecutor(max_workers=1) as side, \
+        # precedent pass takes a third model slot, but only once the first
+        # text-only lens has finished: three requests started together all read
+        # the manuscript cold, which is why CONCURRENCY is two, while a third
+        # that starts on a warm cache costs nothing extra. Queued behind the
+        # lenses instead, it waited about 75 s for a slot.
+        with ThreadPoolExecutor(max_workers=2) as side, \
                 ThreadPoolExecutor(max_workers=CONCURRENCY) as pool:
             checking = side.submit(consistency)
-            jobs = [pool.submit(one, p) for p in PASSES] + [pool.submit(precedents)]
+            looking = side.submit(precedents)
+            jobs = [pool.submit(one, p) for p in PASSES]
             for future in jobs:
                 future.result()  # re-raises whatever a pass raised
+            looking.result()
             checking.result()
         lap("Before consolidation")
         done = len(PASSES) + 2

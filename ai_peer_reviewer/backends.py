@@ -198,7 +198,7 @@ class Backend(ABC):
     @abstractmethod
     def run_structured(
         self, system: str, parts: list[Part], instruction: str,
-        model_cls: type[BaseModel], web_search: bool = False,
+        model_cls: type[BaseModel], web_search: bool = False, effort: str = "high",
     ) -> BaseModel:
         """Answer the instruction as a validated instance of model_cls."""
 
@@ -348,12 +348,12 @@ class AnthropicBackend(Backend):
         )
 
     def run_structured(self, system, parts, instruction, model_cls,
-                       web_search: bool = False) -> BaseModel:
+                       web_search: bool = False, effort: str = "high") -> BaseModel:
         output_config: dict = {
             "format": {"type": "json_schema", "schema": strict_json_schema(model_cls)}
         }
         if self.spec.supports_effort:
-            output_config["effort"] = "high"
+            output_config["effort"] = effort
         raw = self._send(
             system,
             self._content(parts, instruction, cache=True),
@@ -531,8 +531,8 @@ class OpenAIBackend(Backend):
         return response.output_text
 
     def run_structured(self, system, parts, instruction, model_cls,
-                       web_search: bool = False) -> BaseModel:
-        kwargs = self._kwargs(system, parts, instruction)
+                       web_search: bool = False, effort: str = "high") -> BaseModel:
+        kwargs = self._kwargs(system, parts, instruction, effort=effort)
         if web_search:
             kwargs["tools"] = [{"type": "web_search"}]
         response = self._call(
