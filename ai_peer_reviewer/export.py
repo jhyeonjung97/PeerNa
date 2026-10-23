@@ -73,6 +73,7 @@ PRINT_SPACING = (
     "li { margin-bottom: 4pt; }"
     "ol.comments li { margin-bottom: 9pt; }"
     "ol.comments { margin-bottom: 18pt; }"
+    "li.citation { margin-bottom: 8pt; }"
     "h2 { margin-top: 16pt; margin-bottom: 6pt; }"
     "p { margin-bottom: 6pt; }"
     ".provenance { margin-top: 8pt; }"
@@ -298,8 +299,7 @@ def to_docx(report: RefereeReport, manuscript_name: str, model_label: str,
     note.runs[0].font.size = Pt(9.5)
 
     for check in report.citation_checks:
-        paragraph = document.add_paragraph()
-        paragraph.paragraph_format.left_indent = Pt(18)
+        paragraph = document.add_paragraph(style="List Bullet")
         label = paragraph.add_run(
             f"[{STATUS_LABELS.get(check.status, check.status)}] "
         )
@@ -309,7 +309,7 @@ def to_docx(report: RefereeReport, manuscript_name: str, model_label: str,
         paragraph.add_run(f"{check.reference} — {check.location}")
         if check.note.strip():
             detail = document.add_paragraph(check.note.strip())
-            detail.paragraph_format.left_indent = Pt(36)
+            detail.paragraph_format.left_indent = Pt(36)  # under the bullet's text
             detail.runs[0].font.size = Pt(10)
 
     for line in (f"Reviewer confidence: {report.confidence}.", ""):

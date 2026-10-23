@@ -293,7 +293,8 @@ ol.comments li.major::marker { color: var(--major); }
 .tag.verified { color: var(--ok); }
 .tag.unverified, .tag.not_found, .tag.misattributed { color: var(--alarm); background: var(--alarm-bg); }
 
-.citation { margin-bottom: 1.1rem; }
+ul.citations { padding-left: 1.25rem; margin: .6rem 0 1.5rem; }
+.citation { margin-bottom: 1.1rem; padding-left: .2rem; }
 .citation .ref { font-weight: 600; }
 .citation .note { color: var(--muted); font-size: .93rem; margin: .25rem 0 0; }
 
@@ -381,17 +382,19 @@ def render_html(
     out.append("<h2>Citations checked</h2>")
     out.append(f'<p class="note">{e(_coverage_line(report))}</p>')
     if report.citation_checks:
+        out.append('<ul class="citations">')
         for check in report.citation_checks:
             label = STATUS_LABELS.get(check.status, check.status)
             out.append(
-                f'<div class="citation">'
+                f'<li class="citation">'
                 f'<span class="tag {check.status}">{e(label)}</span> '
                 f'<span class="ref">{e(check.reference)}</span> '
                 f'<span class="note">— {e(check.location)}</span>'
             )
             if check.note.strip():
                 out.append(f'<p class="note">{e(check.note.strip())}</p>')
-            out.append("</div>")
+            out.append("</li>")
+        out.append("</ul>")
 
     out.append(
         f'<p class="verdictLine">Reviewer confidence: {e(report.confidence)}</p>'
