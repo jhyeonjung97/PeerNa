@@ -7,6 +7,7 @@ python3 -m tests.test_names
 python3 -m tests.test_routes
 python3 -m tests.test_jobs
 python3 -m tests.test_access
+python3 -m tests.test_corpus_sync
 # Import every module with our own deprecation warnings as errors. A pattern
 # with an inline flag mid-expression only warns on the Python here and is an
 # error on the 3.12 in the container, which took every PDF review down with it.

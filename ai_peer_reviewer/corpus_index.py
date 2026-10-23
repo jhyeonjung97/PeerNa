@@ -20,6 +20,7 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -312,7 +313,16 @@ def embed(texts: list[str], dimensions: int | None = None) -> "list[list[float]]
     out: list[list[float]] = []
     for start in range(0, len(texts), 96):
         chunk = [t[:8000] or " " for t in texts[start:start + 96]]
-        reply = client.embeddings.create(model=EMBED_MODEL, input=chunk, **extra)
+        for attempt in range(8):
+            try:
+                reply = client.embeddings.create(model=EMBED_MODEL, input=chunk, **extra)
+                break
+            except Exception as error:
+                # A whole-corpus rebuild runs into the per-minute token cap;
+                # waiting it out is cheaper than losing the run.
+                if "rate_limit" not in str(error) or attempt == 7:
+                    raise
+                time.sleep(5 * (attempt + 1))
         out.extend(item.embedding for item in reply.data)
     return out
 
@@ -329,7 +339,7 @@ def load_vectors():
 
     if not VECTORS_PATH.is_file():
         return None, []
-    return np.load(VECTORS_PATH), json.loads(IDS_PATH.read_text())
+    return np.load(VECTORS_PATH, mmap_mode="r"), json.loads(IDS_PATH.read_text())
 
 
 def nearest_papers(text: str, k: int, exclude: str = "") -> list[tuple[str, float]]:
@@ -377,6 +387,8 @@ def similar(text: str, k: int = 5, exclude: str = "") -> list[Neighbour]:
 
 _comment_index: tuple | None = None
 
+SCORE_BLOCK = 50_000
+
 
 def load_comment_vectors():
     """Comment vectors with the rowid and paper of each, or None if not built.
@@ -390,7 +402,8 @@ def load_comment_vectors():
     if _comment_index is None and COMMENT_VECTORS_PATH.is_file():
         ids = json.loads(COMMENT_IDS_PATH.read_text())
         _comment_index = (
-            np.load(COMMENT_VECTORS_PATH),
+            # Mapped, not read: the server has 512 MB and this is most of it.
+            np.load(COMMENT_VECTORS_PATH, mmap_mode="r"),
             np.array(ids["rowid"]),
             np.array(ids["slug"]),
         )
@@ -434,7 +447,11 @@ def precedents(
         return [[] for _ in queries]
 
     asked = _unit(embed(queries, dimensions=COMMENT_DIMENSIONS))
-    scores = asked @ vectors[candidates].astype("float32").T
+    # In blocks, so searching the whole corpus never holds a float32 copy of it.
+    scores = np.concatenate([
+        asked @ vectors[candidates[i:i + SCORE_BLOCK]].astype("float32").T
+        for i in range(0, candidates.size, SCORE_BLOCK)
+    ], axis=1)
 
     connection = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True, timeout=10.0)
     try:

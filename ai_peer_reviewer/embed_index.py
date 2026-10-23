@@ -20,6 +20,7 @@ from .corpus_index import (
     VECTORS_PATH,
     embed,
     is_referee_comment,
+    parse_review,
 )
 
 #: Comments shorter than this are almost all fragments the parser cut loose —
@@ -27,6 +28,35 @@ from .corpus_index import (
 SHORTEST_COMMENT = 40
 
 BATCH = 500
+
+
+def reparse() -> tuple[int, int]:
+    """Parse every stored review file again with the current parser.
+
+    The comments table is what an older parser made of `review_text`; the
+    parser has improved since, and re-parsing costs nothing where re-fetching
+    takes a night. Papers whose file now yields nothing keep their old comments
+    rather than vanish. Returns (papers re-parsed, comments now stored).
+    """
+    connection = sqlite3.connect(DB_PATH)
+    rows = connection.execute("SELECT slug, text FROM review_text").fetchall()
+    redone = 0
+    for slug, text in rows:
+        reviews = parse_review(text or "")
+        if not reviews:
+            continue
+        connection.execute("DELETE FROM comments WHERE slug = ?", (slug,))
+        connection.executemany(
+            "INSERT INTO comments VALUES (?,?,?,?)",
+            [(slug, reviewer, position, item)
+             for reviewer, items in reviews
+             for position, item in enumerate(items, 1)],
+        )
+        redone += 1
+    connection.commit()
+    total = connection.execute("SELECT count(*) FROM comments").fetchone()[0]
+    connection.close()
+    return redone, total
 
 
 def rebuild(progress=None) -> int:
@@ -104,11 +134,16 @@ def main(argv: list[str] | None = None) -> int:
                         help="Also rebuild the per-comment index (~$0.35, ~20 min).")
     parser.add_argument("--comments-only", action="store_true",
                         help="Rebuild the per-comment index and leave the papers alone.")
+    parser.add_argument("--reparse", action="store_true",
+                        help="First re-parse the stored review files into comments (free).")
     args = parser.parse_args(argv)
 
     def report(done: int, total: int) -> None:
         print(f"  embedded {done}/{total}", file=sys.stderr, flush=True)
 
+    if args.reparse:
+        papers, comments = reparse()
+        print(f"Re-parsed {papers} review files; {comments} comments.", file=sys.stderr)
     if not args.comments_only:
         count = rebuild(report)
         print(f"Indexed {count} papers.", file=sys.stderr)

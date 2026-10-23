@@ -34,8 +34,12 @@ ONLY = "AI_PEER_REVIEWER_ONLY"
 #: The address Crossref is given with each reference lookup.
 CONTACT = "AI_PEER_REVIEWER_CONTACT"
 
+#: Where the server fetches the corpus index from; see corpus_sync.
+CORPUS_KEYS = ("AI_PEER_REVIEWER_CORPUS", "AI_PEER_REVIEWER_CORPUS_TOKEN",
+               "AI_PEER_REVIEWER_CORPUS_REPO")
+
 RECOGNISED = (KEY_NAME, OPENAI_KEY_NAME, MODEL_NAME,
-              ZERO_RETENTION, CONTACT, ONLY, *NOTIFY_KEYS)
+              ZERO_RETENTION, CONTACT, ONLY, *NOTIFY_KEYS, *CORPUS_KEYS)
 
 #: Path fragments that mean a directory is synced to somebody's cloud.
 CLOUD_MARKERS = (

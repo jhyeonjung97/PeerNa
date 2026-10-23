@@ -41,6 +41,12 @@ services:
       # Addresses that are not rationed, comma-separated. Set in the dashboard.
       - key: AI_PEER_REVIEWER_UNLIMITED
         sync: false
+      # Corpus index release to fetch at start (tools/corpus_bundle.py) and a
+      # read-only GitHub token for the repository. Set in the dashboard.
+      - key: AI_PEER_REVIEWER_CORPUS
+        sync: false
+      - key: AI_PEER_REVIEWER_CORPUS_TOKEN
+        sync: false
       # Uncomment only with an agreement actually in place; it refuses the
       # models that would make the claim false.
       # - key: AI_PEER_REVIEWER_ZERO_RETENTION
@@ -50,9 +56,9 @@ services:
     name: peerna-dev
     runtime: docker
     # Free: no disk, so job history and checkpoints go with each restart, and
-    # no corpus index; and it sleeps after fifteen idle minutes. All acceptable
-    # for checking a change in the real container before it is released. The
-    # corpus-dependent work is tested on the laptop, which has the index.
+    # it sleeps after fifteen idle minutes. Both acceptable for checking a
+    # change in the real container before it is released. The corpus index is
+    # fetched again at each start when AI_PEER_REVIEWER_CORPUS is set.
     plan: free
     healthCheckPath: /healthz
     branch: dev
@@ -75,4 +81,10 @@ services:
       - key: AI_PEER_REVIEWER_ONLY
         sync: false
       - key: AI_PEER_REVIEWER_UNLIMITED
+        sync: false
+      # Corpus index release to fetch at start (tools/corpus_bundle.py) and a
+      # read-only GitHub token for the repository. Set in the dashboard.
+      - key: AI_PEER_REVIEWER_CORPUS
+        sync: false
+      - key: AI_PEER_REVIEWER_CORPUS_TOKEN
         sync: false

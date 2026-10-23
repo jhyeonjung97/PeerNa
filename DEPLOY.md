@@ -54,6 +54,22 @@ mounted disk, or copy an index you have already built into `/data/.cache/`.
 Without the disk these sit in the image layer and vanish on every deploy, taking
 every review anyone has run with them.
 
+## The corpus index
+
+The index is built on the laptop and published as a release of this repository:
+
+    python -m tools.corpus_bundle corpus-2026-10 --publish
+
+A server with `AI_PEER_REVIEWER_CORPUS` set to that tag and
+`AI_PEER_REVIEWER_CORPUS_TOKEN` set to a read-only token fetches it at start, in
+the background; reviews started meanwhile run without precedents. The token is
+a fine-grained one (GitHub → Settings → Developer settings → Personal access
+tokens → Fine-grained tokens), limited to this repository with Contents:
+Read-only. The production server keeps what it fetched on its disk and fetches
+again only when the tag changes; the development server has no disk and fetches
+at every start. The laptop's own database, the one with the review files in it,
+is never overwritten.
+
 ## Sign-in
 
 Off until `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are set; the service

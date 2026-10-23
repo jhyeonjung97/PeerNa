@@ -29,7 +29,7 @@ import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from . import auth, backends, checkpoint as checkpoint_mod, config, loader, models, notify, quota
+from . import auth, backends, checkpoint as checkpoint_mod, config, corpus_sync, loader, models, notify, quota
 from .passes import PASSES, system_prompt
 from .render import render, render_html
 from .review import Reviewer, total_steps
@@ -961,6 +961,8 @@ def main(argv: list[str] | None = None) -> int:
             f"No API credentials found. Set one of {wanted} in the environment, "
             f"or put a key in {config.CONFIG_ENV}."
         )
+
+    corpus_sync.start()
 
     orphans = mark_orphans()
     if orphans:
