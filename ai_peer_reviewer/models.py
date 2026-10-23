@@ -29,10 +29,13 @@ class ModelSpec:
     supports_effort: bool
 
     #: Your account's tokens-per-minute allowance for this model, used to pace
-    #: passes so a run does not trip a 429 partway through. Read it off the
-    #: provider's rate-limit page; the defaults here are conservative starting
-    #: points, not promises. Set to 0 to disable pacing.
-    tokens_per_minute: int = 200_000
+    #: passes so a run does not trip a 429 partway through. Set to 0 to disable
+    #: pacing. It was 200,000, a guess; the response headers on 2026-10-22 said
+    #: 2,000,000 for Luna and 10,000,000 input for Anthropic, and the guess was
+    #: costing about 45 seconds a review in pauses nothing needed. A 429 is still
+    #: retried after its Retry-After, so an account below this is slowed, not
+    #: broken.
+    tokens_per_minute: int = 2_000_000
 
     # -- Anthropic-only knobs; ignored by the OpenAI backend ------------------
 

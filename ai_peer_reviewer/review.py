@@ -117,6 +117,9 @@ class ReviewResult:
     #: result by hand, and the line then leaves them out.
     web_search: bool | None = None
     finished_at: float | None = None
+    #: Wall-clock seconds per stage, and per lens. Lenses overlap, so theirs do
+    #: not add up to the "Lenses" figure, which is the time the group took.
+    timings: dict[str, float] = field(default_factory=dict)
 
 
 class Reviewer:
@@ -556,6 +559,14 @@ class Reviewer:
         total = total_steps()
         done = 0
         running: list[str] = []
+        timings: dict[str, float] = {}
+        started = time.monotonic()
+        mark = [started]
+
+        def lap(name: str) -> None:
+            now = time.monotonic()
+            timings[name] = round(now - mark[0], 1)
+            mark[0] = now
 
         def announce() -> None:
             if not progress:
@@ -570,39 +581,69 @@ class Reviewer:
             with self._lock:
                 running.append(review_pass.title)
             announce()
+            began = time.monotonic()
             try:
                 self.run_pass(manuscript, review_pass)
             finally:
+                timings[f"  {review_pass.title}"] = round(time.monotonic() - began, 1)
                 with self._lock:
                     if review_pass.title in running:
                         running.remove(review_pass.title)
                     done += 1
             announce()
 
-        with ThreadPoolExecutor(max_workers=CONCURRENCY) as pool:
-            for future in [pool.submit(one, p) for p in PASSES]:
+        def consistency() -> None:
+            nonlocal done
+            with self._lock:
+                running.append("Checking consistency")
+            announce()
+            began = time.monotonic()
+            try:
+                self.check_consistency(manuscript)
+            finally:
+                timings["Consistency checks"] = round(time.monotonic() - began, 1)
+                with self._lock:
+                    running.remove("Checking consistency")
+                    done += 1
+                announce()
+
+        def precedents() -> None:
+            nonlocal done
+            with self._lock:
+                running.append("Field expectations")
+            announce()
+            began = time.monotonic()
+            try:
+                precedent = self.checkpoint.load("precedent") if self.checkpoint else ""
+                if not precedent:
+                    precedent = self.precedent_pass(manuscript)
+                    if precedent and self.checkpoint:
+                        self.checkpoint.save("precedent", precedent)
+                if precedent:
+                    self.notes["precedent"] = precedent
+            finally:
+                timings["Field expectations"] = round(time.monotonic() - began, 1)
+                with self._lock:
+                    running.remove("Field expectations")
+                    done += 1
+                announce()
+
+        # Everything before consolidation is independent of everything else in
+        # it, so none of it waits on the rest. The consistency checks are mostly
+        # Crossref round trips and take their own thread from the start. The
+        # precedent pass queues behind the lenses for the same two model slots:
+        # by the time one frees, a lens has written the manuscript into the
+        # cache, and a third simultaneous request would only re-read it cold.
+        # Run in sequence these stages added about two minutes to every review.
+        with ThreadPoolExecutor(max_workers=1) as side, \
+                ThreadPoolExecutor(max_workers=CONCURRENCY) as pool:
+            checking = side.submit(consistency)
+            jobs = [pool.submit(one, p) for p in PASSES] + [pool.submit(precedents)]
+            for future in jobs:
                 future.result()  # re-raises whatever a pass raised
-
-        # Independent of everything else, so it runs before the expensive half:
-        # if the PDF cannot be parsed we would rather know now.
-        self.check_consistency(
-            manuscript,
-            announce=(lambda said: progress(len(PASSES), total, said)) if progress else None,
-        )
-        done = len(PASSES) + 1
-
-        if progress:
-            progress(done, total, "Field expectations")
-        self.backend.pace()
-        precedent = ""
-        if self.checkpoint:
-            precedent = self.checkpoint.load("precedent") or ""
-        if not precedent:
-            precedent = self.precedent_pass(manuscript)
-            if precedent and self.checkpoint:
-                self.checkpoint.save("precedent", precedent)
-        if precedent:
-            self.notes["precedent"] = precedent
+            checking.result()
+        lap("Before consolidation")
+        done = len(PASSES) + 2
 
         # Synthesis and the cutting pass are checkpointed separately. They are
         # the last two stages and between them the most expensive, so an
@@ -617,6 +658,7 @@ class Reviewer:
             self._save_stage("draft", report)
         else:
             self.reused.append("Consolidation")
+        lap("Consolidating")
 
         shorter = self._resume_stage("condensed")
         if shorter is None:
@@ -627,6 +669,7 @@ class Reviewer:
             self._save_stage("condensed", shorter)
         else:
             self.reused.append("Cutting")
+        lap("Cutting")
 
         report = self._resume_stage("report")
         if report is None:
@@ -637,6 +680,9 @@ class Reviewer:
             self._save_stage("report", report)
         else:
             self.reused.append("Decision")
+        lap("Deciding")
+        timings["Waiting on pace()"] = round(self.backend.paced, 1)
+        timings["Total"] = round(time.monotonic() - started, 1)
 
         usage = self.backend.usage
         if self.checkpoint:
@@ -659,6 +705,7 @@ class Reviewer:
             warnings=warnings,
             web_search=self.use_web_search,
             finished_at=time.time(),
+            timings=timings,
         )
 
 

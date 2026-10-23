@@ -85,6 +85,8 @@ class Backend(ABC):
         self.warnings: list[str] = []
         #: Tokens sent on the last call, used to pace the next one.
         self.last_call_tokens = 0
+        #: Seconds spent waiting in pace(), reported with the stage timings.
+        self.paced = 0.0
         #: Passes run concurrently, so every mutation of the counters above has
         #: to be serialised. Without this the reported cost is silently wrong.
         self._lock = threading.Lock()
@@ -184,6 +186,7 @@ class Backend(ABC):
         if seconds >= 1:
             print(f"    pacing {seconds:.0f}s", file=sys.stderr, flush=True)
             time.sleep(min(seconds, 90.0))
+            self.paced += min(seconds, 90.0)
 
     @abstractmethod
     def run_text(

@@ -209,6 +209,9 @@ def main(argv: list[str] | None = None) -> int:
         file=sys.stderr,
     )
     print(f"Cost:   ${actual:.2f}", file=sys.stderr)
+    if result.timings:
+        print("Time:   " + ", ".join(f"{k.strip()} {v:.0f}s" for k, v in result.timings.items()),
+              file=sys.stderr)
 
     history.record_cli_run(
         filename=manuscript.name,
