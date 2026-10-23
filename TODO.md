@@ -204,8 +204,11 @@ the menu still shows the models as available.
 - **LaTeX input.** The form accepts `.tex` but nothing has been through end to
   end — in particular whether `\input` files and the bibliography survive, since
   a `.tex` upload arrives without its directory.
-- **Model registry.** Sonnet 5.5, Opus 5.5 and Haiku 5.5 are not in
-  `models.py`, and Sonnet 5 is priced at $3 / $15 where it is $2 / $10.
+- **Speed.** A review took 570 s on one manuscript, 439 s after the checks and
+  the precedent pass moved alongside the lenses (on this branch, not deployed).
+  Left: the cutting pass takes about 100 s, and the precedent pass waits for a
+  lens slot (75 s) when it could start as soon as one lens has warmed the
+  cache.
 - **Consolidation.** One re-run says the count target was dropping points
   (DECISIONS: Consolidation was dropping points). Check across the Research
   Square set that nothing a pass found goes missing from the report.
