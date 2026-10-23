@@ -145,8 +145,8 @@ def _appendix_lines(report: RefereeReport, result: ReviewResult, model_label: st
     ]
     if result.warnings:
         lines += ["**Run warnings**", ""]
-        lines += [f"- {w}" for w in dict.fromkeys(result.warnings)]
-        lines.append("")
+        for w in dict.fromkeys(result.warnings):
+            lines += [w, ""]
     lines += [
         f"_Reviewer confidence: {report.confidence}._",
         "",
@@ -405,9 +405,10 @@ def render_html(
 
     # How the run went, then how sure it was, then what made it.
     if result.warnings:
-        out.append("<h2>Run warnings</h2><ul>")
-        out.extend(f"<li>{e(w)}</li>" for w in dict.fromkeys(result.warnings))
-        out.append("</ul>")
+        # Paragraphs, not a list: there is usually one, and a lone bullet
+        # looked like a stray mark.
+        out.append("<h2>Run warnings</h2>")
+        out.extend(f'<p class="warning">{e(w)}</p>' for w in dict.fromkeys(result.warnings))
     out.append(f'<p class="verdictLine">Reviewer confidence: {e(report.confidence)}</p>')
 
     out.append(f'<p class="disclosure">{e(AI_DISCLOSURE)}</p>')
