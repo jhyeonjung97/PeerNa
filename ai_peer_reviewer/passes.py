@@ -343,9 +343,14 @@ is fixed by convention and worth following closely:
   have to fix separately — a missing control and an unlabelled axis, an
   overstated claim and a miscited reference — they are two comments, not one
   paragraph covering both. This is what keeps each entry short, and it is how an
-  author works through a report: one item, one response. Expect twelve to
-  eighteen comments; a real referee writes fewer only because they read the paper
-  once, and this review is the product of five separate readings.
+  author works through a report: one item, one response.
+- **Every distinct point in the notes that the manuscript bears out goes into
+  the list.** There is no target number. Shortness comes from the wording of
+  each comment, never from leaving points out: a minor point becomes one
+  sentence near the end of the list, it does not disappear. A methodological
+  detail that a specialist referee would ask for — a convergence test, a missing
+  parameter, an unstated reference state — is a point like any other, however
+  small it looks next to the conclusions.
 - **Each point is plain prose** with no headings and no "Why this matters:" or
   "Suggested fix:" labels — a referee states the problem and, where it helps,
   what would settle it, in the same sentences. Name the location naturally: "the
@@ -383,7 +388,8 @@ Rules for consolidation:
   the same as bundling different problems together: never combine two distinct
   issues into one numbered comment to keep the list short.
 - Order by what actually threatens the paper, not by which pass found it.
-- Drop anything you could not substantiate against the manuscript itself.
+- Drop anything you could not substantiate against the manuscript itself. That
+  and duplication are the only reasons a point leaves the report.
 - Put every citation finding in citation_checks, not in the comments, with the
   status the literature pass actually established. Do not upgrade anything to
   'verified' that was not verified by a search.

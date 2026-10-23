@@ -71,9 +71,10 @@ class RefereeReport(BaseModel):
         description="The numbered points, ordered from most important to most "
         "minor — the first entry should be the thing that most threatens the "
         "paper. One problem per entry: two issues an author would fix separately "
-        "are two comments, never one paragraph covering both. Twelve to eighteen "
-        "entries is normal for this review, which is the product of five "
-        "readings. Figure problems belong here like any other comment. Citation "
+        "are two comments, never one paragraph covering both. Every distinct, "
+        "substantiated point from the readings is an entry; there is no target "
+        "number, and a minor point is kept as one short sentence rather than "
+        "dropped. Figure problems belong here like any other comment. Citation "
         "verification does not: it is reported in citation_checks. Do not pad, "
         "and do not split one problem across two entries."
     )
