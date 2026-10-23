@@ -75,6 +75,7 @@ PRINT_SPACING = (
     "ol.comments { margin-bottom: 18pt; }"
     "h2 { margin-top: 16pt; margin-bottom: 6pt; }"
     "p { margin-bottom: 6pt; }"
+    ".provenance { margin-top: 8pt; }"
     "</style>"
 )
 
@@ -322,11 +323,15 @@ def to_docx(report: RefereeReport, manuscript_name: str, model_label: str,
 
     from .render import provenance
 
-    footer = document.add_paragraph(
-        f"{AI_DISCLOSURE} {provenance(model_label, web_search, finished_at)}")
-    footer.runs[0].font.size = Pt(9)
-    footer.runs[0].font.color.rgb = RGBColor(0x6B, 0x65, 0x60)
-    footer.alignment = WD_ALIGN_PARAGRAPH.LEFT
+    # Two paragraphs, not one: run together the disclosure and the provenance
+    # read as a single sentence.
+    for text, before in ((AI_DISCLOSURE, None), (provenance(model_label, web_search, finished_at), Pt(6))):
+        footer = document.add_paragraph(text)
+        footer.runs[0].font.size = Pt(9)
+        footer.runs[0].font.color.rgb = RGBColor(0x6B, 0x65, 0x60)
+        footer.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        if before is not None:
+            footer.paragraph_format.space_before = before
 
     buffer = tempfile.NamedTemporaryFile(suffix=".docx", delete=False)
     buffer.close()

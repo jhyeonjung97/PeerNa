@@ -264,6 +264,7 @@ ol.comments li.major::marker { color: var(--major); }
 .appendix h2 { margin-top: 1.3rem; }
 .verdictLine { font-family: ui-sans-serif, system-ui, sans-serif; font-size: .92rem; }
 .disclosure { color: var(--muted); font-size: .82rem; font-family: ui-sans-serif, system-ui, sans-serif; }
+.disclosure.provenance { margin-top: .6rem; }
 
 .concern { border-left: 3px solid var(--rule); padding: 0 0 .1rem 1.1rem; margin-bottom: 1.9rem; }
 .concern.major { border-left-color: var(--major); }
@@ -401,7 +402,8 @@ def render_html(
         out.extend(f"<li>{e(w)}</li>" for w in dict.fromkeys(result.warnings))
         out.append("</ul>")
 
-    out.append(f'<p class="disclosure">{e(AI_DISCLOSURE)}<br>'
+    out.append(f'<p class="disclosure">{e(AI_DISCLOSURE)}</p>')
+    out.append(f'<p class="disclosure provenance">'
                f'{e(provenance(model_label, result.web_search, result.finished_at))}</p>')
     sources = _credit_sources(result)
     if sources:
