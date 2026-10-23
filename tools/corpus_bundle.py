@@ -30,7 +30,7 @@ def slim_database(target: Path) -> None:
     a VACUUM of a copy would renumber them, so the rows are inserted instead.
     """
     target.unlink(missing_ok=True)
-    out = sqlite3.connect(target)
+    out = sqlite3.connect(target, timeout=60)  # the harvest may be writing
     out.executescript(
         """
         CREATE TABLE papers (slug TEXT PRIMARY KEY, title TEXT, abstract TEXT);

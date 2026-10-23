@@ -232,6 +232,10 @@ LEADING_LABEL = re.compile(r"^\W*(?:(?:Comment|Point|Question|Issue|Q|C)\s*\d*\s
 def is_referee_comment(text: str) -> bool:
     """Whether a parsed item is a referee's comment, not a reply or a reference."""
     head = text[:500]
+    # A PDF set in a font with no character map extracts as private-use code
+    # points: unreadable, and dense enough to overrun the embedding limit.
+    if sum(c.isascii() for c in head) < len(head) / 2:
+        return False
     if CITATION.match(head) and CITATION_TAIL.search(head) and len(text) < 600 and not ASKING.search(text):
         return False
     if AUTHOR_OPENING.match(head) or AUTHOR_CHANGE.search(head):
@@ -320,6 +324,11 @@ def embed(texts: list[str], dimensions: int | None = None) -> "list[list[float]]
             except Exception as error:
                 # A whole-corpus rebuild runs into the per-minute token cap;
                 # waiting it out is cheaper than losing the run.
+                if "maximum input length" in str(error) and attempt == 0:
+                    # Characters are not tokens; text that is mostly symbols
+                    # runs over at a length plain prose never reaches.
+                    chunk = [t[:2000] for t in chunk]
+                    continue
                 if "rate_limit" not in str(error) or attempt == 7:
                     raise
                 time.sleep(5 * (attempt + 1))
