@@ -100,8 +100,8 @@ SONNET_5 = ModelSpec(
     provider="anthropic",
     id="claude-sonnet-5",
     label="Sonnet 5",
-    input_per_mtok=3.00,
-    output_per_mtok=15.00,
+    input_per_mtok=2.00,
+    output_per_mtok=10.00,
     context_tokens=1_000_000,
     max_pdf_pages=600,
     adaptive_thinking=True,
@@ -124,6 +124,76 @@ HAIKU_45 = ModelSpec(
     web_search_tool_type="web_search_20250305",
 )
 
+# -- the 5.5 generation and Fable 5.1 (October 2026) -------------------------
+#
+# What the menu names now. None of them accepts disabled thinking or forced
+# tool choice, and neither is sent: thinking is adaptive and structured output
+# goes through output_config.format. Prices are list prices.
+
+FABLE_51 = ModelSpec(
+    provider="anthropic",
+    id="claude-fable-5-1",
+    label="Fable 5.1",
+    input_per_mtok=10.00,
+    output_per_mtok=50.00,
+    context_tokens=1_000_000,
+    max_pdf_pages=600,
+    adaptive_thinking=True,
+    supports_effort=True,
+    supports_fallbacks=True,
+    web_search_tool_type="web_search_20260209",
+    fallback_model="claude-opus-4-8",
+    requires_data_retention=True,
+)
+
+OPUS_55 = ModelSpec(
+    provider="anthropic",
+    id="claude-opus-5-5",
+    label="Opus 5.5",
+    input_per_mtok=4.00,
+    output_per_mtok=20.00,
+    context_tokens=1_000_000,
+    max_pdf_pages=600,
+    adaptive_thinking=True,
+    supports_effort=True,
+    supports_fallbacks=True,
+    web_search_tool_type="web_search_20260209",
+    fallback_model="claude-opus-4-8",
+)
+
+SONNET_55 = ModelSpec(
+    provider="anthropic",
+    id="claude-sonnet-5-5",
+    label="Sonnet 5.5",
+    input_per_mtok=2.00,
+    output_per_mtok=10.00,
+    context_tokens=1_000_000,
+    max_pdf_pages=600,
+    adaptive_thinking=True,
+    supports_effort=True,
+    # Sonnet 5.5 takes only the "default" form of fallbacks, not the list the
+    # request builder sends, so it goes without.
+    supports_fallbacks=False,
+    web_search_tool_type="web_search_20260209",
+)
+
+HAIKU_55 = ModelSpec(
+    provider="anthropic",
+    id="claude-haiku-5-5",
+    label="Haiku 5.5",
+    # Up to 100K input tokens a request; beyond that $0.50 / $2.50. A review's
+    # requests sit under it, so the lower rate is the one used for estimates.
+    input_per_mtok=0.10,
+    output_per_mtok=0.50,
+    context_tokens=1_000_000,
+    max_pdf_pages=600,
+    adaptive_thinking=True,
+    supports_effort=True,
+    supports_fallbacks=False,
+    # The dynamic-filtering search tool is not offered on Haiku.
+    web_search_tool_type="web_search_20250305",
+)
+
 LUNA = ModelSpec(
     provider="openai",
     id="gpt-5.6-luna",
@@ -140,12 +210,18 @@ LUNA = ModelSpec(
 #: Order here is the order shown in `--help`.
 ALIASES = ("luna", "fable", "opus", "sonnet", "haiku")
 
+#: The short names follow the newest model of each line. The older ones stay
+#: reachable by their full ids, so a run can be repeated on what it used.
 REGISTRY: dict[str, ModelSpec] = {
-    "fable": FABLE_5,
-    "opus": OPUS_5,
-    "sonnet": SONNET_5,
-    "haiku": HAIKU_45,
+    "fable": FABLE_51,
+    "opus": OPUS_55,
+    "sonnet": SONNET_55,
+    "haiku": HAIKU_55,
     "luna": LUNA,
+    FABLE_51.id: FABLE_51,
+    OPUS_55.id: OPUS_55,
+    SONNET_55.id: SONNET_55,
+    HAIKU_55.id: HAIKU_55,
     FABLE_5.id: FABLE_5,
     OPUS_5.id: OPUS_5,
     SONNET_5.id: SONNET_5,
@@ -153,9 +229,10 @@ REGISTRY: dict[str, ModelSpec] = {
     LUNA.id: LUNA,
 }
 
-#: Luna, and deliberately so. It is the cheapest model here by an order of
-#: magnitude, every measurement in DECISIONS.md was taken on it, and changing it
-#: would invalidate all of them at once.
+#: Luna, and deliberately so. Every measurement in DECISIONS.md was taken on it,
+#: and changing it would invalidate all of them at once. It was the cheapest by
+#: an order of magnitude when chosen; Haiku 5.5 is now cheaper per token, and
+#: whether it reviews as well is unmeasured.
 DEFAULT_MODEL = "luna"
 
 #: Shown by `--help` and in the cost preview.
@@ -163,8 +240,8 @@ QUALITY_NOTE = {
     "fable": "Most capable. Worth it for a paper you cannot afford to misjudge. Needs 30-day data retention.",
     "opus": "Best value for real reviews. Catches subtle methodological problems.",
     "sonnet": "Solid. Good for iterating on your own drafts.",
-    "haiku": "Fast and cheap, but shallow — expect generic comments. 200K context only.",
-    "luna": "Cheapest by far (OpenAI). Bottom tier, so expect shallow findings. Needs OPENAI_API_KEY.",
+    "haiku": "Cheapest per token, fast. Untested here — no review quality measured yet.",
+    "luna": "Cheap (OpenAI) and the model every measurement here was taken on. Expect shallow findings. Needs OPENAI_API_KEY.",
 }
 
 #: Environment variable each provider's SDK reads.

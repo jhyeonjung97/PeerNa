@@ -59,7 +59,10 @@ def allowed(email: str | None, spec) -> bool:
 
     if exempt(email):
         return True
-    return spec.id not in {REGISTRY[name].id for name in PAID_ONLY}
+    # Every model of the line, not only the one the short name points at: the
+    # older ones stay reachable by their full ids, and a request can name one.
+    lines = {REGISTRY[name].label.split()[0] for name in PAID_ONLY}
+    return spec.label.split()[0] not in lines
 
 
 def _read() -> dict[str, int]:

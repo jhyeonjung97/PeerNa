@@ -62,13 +62,19 @@ Registry in `models.py` carries every per-model difference — thinking style,
 effort support, web-search tool version, context and page limits, pricing — so
 the request code stays uniform. Swapping in a model by ID alone would 400.
 
-| | cost/paper | notes |
-|---|---|---|
-| Fable 5 | ~$2.00 | most capable; needs 30-day data retention |
-| Opus 5 | ~$0.75 | best value for a review you act on |
-| Sonnet 5 | ~$0.60 | |
-| Haiku 4.5 | ~$0.15 | 200K context, 100 PDF pages |
-| **GPT-5.6 Luna** | **~$0.08** | current default; cheapest, bottom tier |
+| | $/MTok in / out | cost/paper | notes |
+|---|---|---|---|
+| Fable 5.1 | 10 / 50 | ~$2.00 | most capable; needs 30-day data retention |
+| Opus 5.5 | 4 / 20 | ~$0.60 | |
+| Sonnet 5.5 | 2 / 10 | ~$0.40 | no list-form refusal fallback |
+| Haiku 5.5 | 0.10 / 0.50 | ~$0.02 | cheapest per token; review quality unmeasured |
+| **GPT-5.6 Luna** | **0.20 / 1.20** | **~$0.10** | default; every measurement here was taken on it |
+
+Updated 2026-10-22 when the short names moved to the 5.5 generation and Fable
+5.1. Costs per paper for the Claude models are scaled from the earlier
+estimates by list price, not measured; Luna's is the ablation's $1.10 for ten
+papers. Sonnet 5 had been priced at $3 / $15 here, which was wrong; it is $2 /
+$10. The older models stay reachable by their full ids.
 
 **Anthropic vs OpenAI is roughly a wash on price.** Measured tier by tier, the
 flagships are within ~13% of each other; only at the bottom tier is OpenAI
