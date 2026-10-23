@@ -400,8 +400,16 @@ def _supplementary_mentions(text: str) -> list[tuple[str, int, set[str]]]:
 CROSSREF = "https://api.crossref.org/works"
 
 #: Crossref asks for a contact address and gives faster, more reliable service
-#: to requests that carry one.
-CROSSREF_AGENT = "peerna/1.0 (https://github.com/; mailto:peerna@example.invalid)"
+#: to requests that carry one. The address comes from the environment rather than
+#: the source, so the repository does not carry it.
+CONTACT_ENV = "AI_PEER_REVIEWER_CONTACT"
+
+
+def _crossref_agent() -> str:
+    import os
+
+    contact = os.environ.get(CONTACT_ENV, "").strip()
+    return f"peerna/1.0 (mailto:{contact})" if contact else "peerna/1.0"
 
 #: An entry begins at a line that starts with its number. Requiring the number
 #: to sit alone on its line — which it does about half the time — found 23 of 46
@@ -439,7 +447,7 @@ def _crossref(params: dict) -> dict | None:
     import urllib.request
 
     url = f"{CROSSREF}?{urllib.parse.urlencode(params)}"
-    request = urllib.request.Request(url, headers={"User-Agent": CROSSREF_AGENT})
+    request = urllib.request.Request(url, headers={"User-Agent": _crossref_agent()})
     try:
         with urllib.request.urlopen(request, timeout=30) as response:
             return json.loads(response.read())

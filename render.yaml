@@ -27,6 +27,9 @@ services:
         sync: false
       - key: AI_PEER_REVIEWER_MODEL
         value: luna
+      # Contact address sent to Crossref with reference lookups. Set in the dashboard.
+      - key: AI_PEER_REVIEWER_CONTACT
+        sync: false
       # Addresses that are not rationed, comma-separated. Set in the dashboard.
       - key: AI_PEER_REVIEWER_UNLIMITED
         sync: false
