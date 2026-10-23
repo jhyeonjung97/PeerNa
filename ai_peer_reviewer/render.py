@@ -109,7 +109,7 @@ def render(result: ReviewResult, manuscript_name: str, mode: str, model_label: s
     lines += [
         f"**{manuscript_name}**",
         "",
-        f"**Recommendation: {call}**",
+        f"**Recommendation: {call}** (Reviewer confidence: {report.confidence})",
         "",
         report.general_comments.strip(),
         "",
@@ -148,8 +148,6 @@ def _appendix_lines(report: RefereeReport, result: ReviewResult, model_label: st
         for w in dict.fromkeys(result.warnings):
             lines += [w, ""]
     lines += [
-        f"_Reviewer confidence: {report.confidence}._",
-        "",
         f"_{AI_DISCLOSURE}_",
         "",
         f"_{provenance(model_label, result.web_search, result.finished_at)}_",
@@ -269,6 +267,7 @@ ol.comments li.major::marker { color: var(--major); }
 .verdictLine { font-family: ui-sans-serif, system-ui, sans-serif; font-size: .92rem; }
 .disclosure { color: var(--muted); font-size: .82rem; font-family: ui-sans-serif, system-ui, sans-serif; }
 .disclosure.provenance { margin-top: .6rem; }
+.verdict .confidence { color: var(--muted); font-weight: 400; }
 
 .concern { border-left: 3px solid var(--rule); padding: 0 0 .1rem 1.1rem; margin-bottom: 1.9rem; }
 .concern.major { border-left-color: var(--major); }
@@ -371,7 +370,9 @@ def render_html(
     out.append("</header>")
 
     call = RECOMMENDATION_LABELS.get(report.recommendation, report.recommendation)
-    out.append(f'<p class="verdict">Recommendation: <strong>{e(call)}</strong></p>')
+    # The confidence belongs to the recommendation, so it is read with it.
+    out.append(f'<p class="verdict">Recommendation: <strong>{e(call)}</strong> '
+               f'<span class="confidence">(Reviewer confidence: {e(report.confidence)})</span></p>')
     out.append(f'<p class="general">{e(report.general_comments.strip())}</p>')
 
     out.append('<ol class="comments">')
@@ -409,7 +410,6 @@ def render_html(
         # looked like a stray mark.
         out.append("<h2>Run warnings</h2>")
         out.extend(f'<p class="warning">{e(w)}</p>' for w in dict.fromkeys(result.warnings))
-    out.append(f'<p class="verdictLine">Reviewer confidence: {e(report.confidence)}</p>')
 
     out.append(f'<p class="disclosure">{e(AI_DISCLOSURE)}</p>')
     out.append(f'<p class="disclosure provenance">'

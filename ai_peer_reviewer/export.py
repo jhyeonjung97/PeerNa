@@ -287,6 +287,8 @@ def to_docx(report: RefereeReport, manuscript_name: str, model_label: str,
     )
     call.bold = True
     call.font.color.rgb = RGBColor(0xA0, 0x2C, 0x2C)
+    confidence = verdict.add_run(f" (Reviewer confidence: {report.confidence})")
+    confidence.font.color.rgb = RGBColor(0x6B, 0x65, 0x60)
 
     document.add_paragraph(report.general_comments.strip())
 
@@ -330,7 +332,6 @@ def to_docx(report: RefereeReport, manuscript_name: str, model_label: str,
         entry.runs[0].font.size = Pt(9.5)
         entry.runs[0].font.color.rgb = RGBColor(0xA0, 0x2C, 0x2C)
 
-    document.add_paragraph(f"Reviewer confidence: {report.confidence}.").runs[0].italic = True
 
     from .render import provenance
 
