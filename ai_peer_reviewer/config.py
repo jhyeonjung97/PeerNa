@@ -27,7 +27,7 @@ ZERO_RETENTION = "AI_PEER_REVIEWER_ZERO_RETENTION"
 
 #: Settings the .env file may set. Anything else in the file is ignored.
 NOTIFY_KEYS = ("AI_PEER_REVIEWER_EMAIL", "SMTP_USER", "SMTP_PASSWORD",
-               "SMTP_HOST", "SMTP_FROM")
+               "SMTP_HOST", "SMTP_FROM", "AI_PEER_REVIEWER_NOTIFY")
 #: The address Crossref is given with each reference lookup.
 CONTACT = "AI_PEER_REVIEWER_CONTACT"
 

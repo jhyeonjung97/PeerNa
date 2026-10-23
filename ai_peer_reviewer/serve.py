@@ -77,6 +77,9 @@ def _load_persisted(job_id: str) -> dict | None:
 #: cosmetic — a visitor must not be able to replace the operator's credentials.
 HOSTED = False
 
+#: Where a click on the finished-review notification goes. Set when serving.
+PAGE_URL = ""
+
 #: Stands in for a signed-in address when nobody needs to sign in — a local run,
 #: or a deployment with no Google credentials configured. Everything downstream
 #: compares owners, so it needs a value rather than a special case.
@@ -425,6 +428,7 @@ def _run_review(job_id: str, path: Path, spec, web_search: bool,
             f"{result.report.recommendation.replace('_', ' ')} · "
             f"${result.usage.cost(spec):.2f}",
             subtitle="Review finished",
+            opens=PAGE_URL,
         )
     except SystemExit as exc:
         _update(job_id, status="error", error=str(exc))
@@ -951,6 +955,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Marked {orphans} interrupted review(s) from a previous run.")
 
     url = f"http://127.0.0.1:{args.port}/"
+    global PAGE_URL
+    PAGE_URL = url
     global HOSTED
     HOSTED = args.host not in ("127.0.0.1", "localhost", "::1")
 

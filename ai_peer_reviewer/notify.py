@@ -8,9 +8,15 @@ when you are at the machine, and an email for when you are not.
 from __future__ import annotations
 
 import os
+import shutil
 import smtplib
 import subprocess
 from email.message import EmailMessage
+from pathlib import Path
+
+#: Set to 0 to send nothing at all, for scripted runs that would otherwise put a
+#: notification up for every paper.
+ENABLED = "AI_PEER_REVIEWER_NOTIFY"
 
 #: Set in ~/.config/ai-peer-reviewer/.env to turn email on.
 EMAIL_TO = "AI_PEER_REVIEWER_EMAIL"
@@ -26,17 +32,38 @@ SMTP_HOST = "SMTP_HOST"
 SMTP_FROM = "SMTP_FROM"
 
 
-def announce(subject: str, body: str, subtitle: str = "") -> list[str]:
-    """Send what is configured. Returns the channels that actually went out."""
+def announce(subject: str, body: str, subtitle: str = "", opens: str = "") -> list[str]:
+    """Send what is configured. Returns the channels that actually went out.
+
+    `opens` is what a click on the desktop notification should open: the report
+    file for a command-line run, the page for a local server.
+    """
+    if os.environ.get(ENABLED, "1").strip() == "0":
+        return []
     sent = []
-    if _desktop(subject, body, subtitle):
+    if _desktop(subject, body, subtitle, opens):
         sent.append("desktop")
     if _email(subject, body):
         sent.append("email")
     return sent
 
 
-def _desktop(title: str, body: str, subtitle: str = "") -> bool:
+def _desktop(title: str, body: str, subtitle: str = "", opens: str = "") -> bool:
+    # terminal-notifier first, when it is installed: a notification posted by
+    # AppleScript belongs to Script Editor, so clicking it opens Script Editor
+    # on its empty iCloud folder, and there is no way to make it open the report.
+    notifier = shutil.which("terminal-notifier")
+    if notifier:
+        command = [notifier, "-title", title, "-message", body[:400], "-group", "peerna"]
+        if subtitle:
+            command += ["-subtitle", subtitle]
+        if opens:
+            command += ["-open", opens if "://" in opens else Path(opens).resolve().as_uri()]
+        try:
+            subprocess.run(command, capture_output=True, timeout=10, check=True)
+            return True
+        except Exception:
+            pass  # fall through to AppleScript
     script = f"display notification {_quote(body)} with title {_quote(title)}"
     if subtitle:
         script += f" subtitle {_quote(subtitle)}"

@@ -230,6 +230,7 @@ def main(argv: list[str] | None = None) -> int:
         f"{len(result.report.comments)} comments · "
         f"{result.report.recommendation.replace('_', ' ')} · ${actual:.2f}{where}",
         subtitle="Review finished",
+        opens=str(args.out) if args.out else "",
     )
     if sent:
         print(f"Notified: {', '.join(sent)}", file=sys.stderr)
