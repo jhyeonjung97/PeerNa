@@ -11,7 +11,6 @@ import json
 import sqlite3
 
 from .corpus_index import (
-    BIBLIOGRAPHIC,
     COMMENT_DIMENSIONS,
     COMMENT_IDS_PATH,
     COMMENT_VECTORS_PATH,
@@ -20,6 +19,7 @@ from .corpus_index import (
     INDEX_DIR,
     VECTORS_PATH,
     embed,
+    is_referee_comment,
 )
 
 #: Comments shorter than this are almost all fragments the parser cut loose —
@@ -61,9 +61,10 @@ def rebuild(progress=None) -> int:
 def rebuild_comments(progress=None) -> int:
     """One vector per referee comment, for finding precedents part by part.
 
-    Reference-list entries are left out here though they stay in the database:
-    they are numbered like comments and survive parsing, and in a search by
-    method they would surface whenever a query named a technique.
+    Reference-list entries and the authors' replies are left out here though
+    they stay in the database: both are numbered like comments and survive
+    parsing, and in a search by method they surface as precedents that no
+    referee wrote. See `is_referee_comment`.
     """
     import numpy as np
 
@@ -74,7 +75,7 @@ def rebuild_comments(progress=None) -> int:
         (SHORTEST_COMMENT,),
     ).fetchall()
     connection.close()
-    rows = [r for r in rows if not BIBLIOGRAPHIC.search(r[2])]
+    rows = [r for r in rows if is_referee_comment(r[2])]
     if not rows:
         return 0
 

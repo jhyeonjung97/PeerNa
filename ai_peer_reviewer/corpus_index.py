@@ -53,7 +53,8 @@ COMMENT_DIMENSIONS = 512
 #: optional bare number is allowed before the marker.
 REPLY_MARKER = re.compile(
     r"(?i)(?:(?<=[.!?])|(?<=\n)|^)\s*(?:\d{1,3}\s+)?"
-    r"(?:Response|Reply|Authors?'?\s+response|Our\s+response|Answer)"
+    r"(?:Response|Reply|Authors?['’]?\s+(?:response|reply)|Our\s+(?:response|reply)|"
+    r"Response\s+(?:from|of)\s+(?:the\s+)?authors?|Answer)"
     r"\s*[:.\-–]\s"
 )
 
@@ -174,6 +175,76 @@ REFEREE_VOICE = re.compile(
     r"explain|justify|clarify|add|report|suggest|recommend|would be|appears?|seems?|"
     r"the authors?|it is)\b"
 )
+
+
+#: What a numbered item in a review file turns out to be. Measured on 400 drawn
+#: at random from the corpus and labelled by a model, then checked by hand: two
+#: thirds were a referee's comment, a fifth the authors' reply that the reply-
+#: marker cut had missed, a tenth a bibliography entry. The rules below are
+#: written to keep every referee comment and lose what they can of the rest: on
+#: that sample they dropped one referee comment in 265, nine bibliography entries
+#: in ten, and about half the replies. A reply that slips through costs a
+#: precedent slot; a referee comment wrongly dropped costs a precedent.
+AUTHOR_OPENING = re.compile(
+    r"^\W*(?:\d+[.)]\s*)?(?:"
+    r"(?:Response|Reply|Answer)(?!\s+to\s+(?:the\s+)?reviewer)\s*\d*\s*[:.)\-–]|A\d+\s*[:.)]|R\d+\s*[:.)]|"
+    r"We (?:have|had|thank|appreciate|agree|apologi[sz]e|added|revised|now|are grateful)\b|"
+    r"Thank(?:s| you)\b|As (?:suggested|requested|recommended|pointed out) by\b|"
+    r"Following (?:the|your) (?:reviewer|suggestion|advice|comment|recommendation)|In response to\b|"
+    r"According to (?:the|your) (?:reviewer|suggestion)|"
+    r"(?:Added|Revised|Corrected|Changed|Modified|Rephrased|Amended)\b)",
+    re.I,
+)
+AUTHOR_CHANGE = re.compile(
+    r"\b(?:we (?:have|had) (?:now |also |further |additionally )?(?:added|revised|included|performed|"
+    r"conducted|carried out|provided|modified|corrected|changed|clarified|rewritten|updated|measured|"
+    r"calculated|rephrased|removed|deleted|amended)|we (?:added|revised|included|performed|conducted|"
+    r"carried out|clarified|corrected|amended)|(?:has|have) been (?:added|revised|included|corrected|"
+    r"amended|updated) (?:in|to) the (?:revised |main )?(?:manuscript|text|supplementary|SI)|"
+    r"(?:thank|appreciate) the reviewer|the reviewer['’]s (?:comment|suggestion|concern))",
+    re.I,
+)
+#: Referees write "the authors"; the authors write "we". A "we" with no word
+#: addressed to the authors is the authors talking — except for the handful of
+#: phrases referees, often writing in a second language, use to soften a point.
+FIRST_PERSON = re.compile(r"\b(?:we|our|us|ours)\b", re.I)
+ADDRESSED = re.compile(r"(?i)\b(?:the authors?|authors['’]|you|your)\b|\?")
+REFEREE_WE = re.compile(
+    r"(?i)\b(?:we (?:suggest|recommend|believe|think|wonder|would (?:like|suggest|recommend))|"
+    r"in our (?:opinion|view))\b"
+)
+CITATION = re.compile(
+    r"^\W*(?:\[?\d{1,3}[\].)]?\s*)?(?:"
+    r"[A-Z][\w'’\-]+(?:\s[a-z]{1,3}\s[A-Z][\w'’\-]+)?,?\s+(?:[A-Z]\.\s?-?){1,3}(?:,|;|\s+et al|\s*&|\s+and)"
+    r"|[A-Z][\w'’\-]+\s+[A-Z]{1,3},?\s+(?:et al|[A-Z][\w'’\-]+\s+[A-Z]{1,3}\b)"
+    r"|(?:[A-Z]\.\s?-?){1,3}\s?[A-Z][\w'’\-]+,\s+(?:[A-Z]\.\s?){1,3}"
+    r"|[A-Z]{1,2}\s[A-Z][\w'’\-]+,\s+[A-Z]{1,2}\s[A-Z]"
+    r"|[A-Z][\w'’\-]+,\s+[A-Z]\.(?:\s?[A-Z]\.)?;"
+    r")"
+)
+CITATION_TAIL = re.compile(r"\(\d{4}\)|\b\d{1,4},\s*\d{1,6}(?:[-–]\d{1,6})?\b|\bdoi\b|\b\d{4}\b")
+ASKING = re.compile(r"(?i)\b(?:the authors?|please|should|could you|i (?:suggest|recommend|wonder)|it is unclear)\b")
+#: A label a parser left on the front of a comment.
+LEADING_LABEL = re.compile(r"^\W*(?:(?:Comment|Point|Question|Issue|Q|C)\s*\d*\s*[:.)]\s*|\d{1,2}[.)]\s+)", re.I)
+
+
+def is_referee_comment(text: str) -> bool:
+    """Whether a parsed item is a referee's comment, not a reply or a reference."""
+    head = text[:500]
+    if CITATION.match(head) and CITATION_TAIL.search(head) and len(text) < 600 and not ASKING.search(text):
+        return False
+    if AUTHOR_OPENING.match(head) or AUTHOR_CHANGE.search(head):
+        return False
+    if FIRST_PERSON.search(head) and not ADDRESSED.search(head) and not REFEREE_WE.search(head):
+        return False
+    return True
+
+
+def comment_key(text: str) -> str:
+    """What two copies of one comment have in common: no label, case or spacing."""
+    for _ in range(2):
+        text = LEADING_LABEL.sub("", text)
+    return " ".join(text.lower().split())[:300]
 
 
 _examples: list[str] = []
@@ -377,9 +448,11 @@ def precedents(
                 text = connection.execute(
                     "SELECT text FROM comments WHERE rowid = ?", (rowid,)
                 ).fetchone()
-                if not text:
+                # Checked here as well as when the index is built, so an index
+                # built before the filter existed still returns only referees.
+                if not text or not is_referee_comment(text[0]):
                     continue
-                key = " ".join(text[0].lower().split())[:300]
+                key = comment_key(text[0])
                 if key in taken:
                     continue
                 taken.add(key)

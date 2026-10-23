@@ -282,7 +282,7 @@ class Reviewer:
         self, manuscript: Manuscript, exclude: str = ""
     ) -> "tuple[str, str, list[str]] | None":
         """Every comment on the papers nearest this one, as reference material."""
-        from .corpus_index import similar
+        from .corpus_index import is_referee_comment, similar
 
         text = _leading_text(manuscript)
         if not text:
@@ -294,7 +294,8 @@ class Reviewer:
         lines, budget = [], PRECEDENT_COMMENTS
         for n in neighbours:
             lines.append(f"\n=== From referee reports on: {n.title[:90]} ===")
-            for c in n.comments[: max(1, budget // len(neighbours))]:
+            kept = [c for c in n.comments if is_referee_comment(c)]
+            for c in kept[: max(1, budget // len(neighbours))]:
                 lines.append(f"- {c[:600]}")
                 budget -= 1
         return PRECEDENT_INSTRUCTION, "\n".join(lines), [n.slug for n in neighbours]
