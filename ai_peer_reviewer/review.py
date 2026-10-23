@@ -48,6 +48,13 @@ PRECEDENT_PER_PART = 8
 PRECEDENT_TOPIC_PAPERS = 150
 from .schema import Mismatches, Parts, RefereeReport, Verdict
 
+#: Said on the command line when the literature pass runs without search. The
+#: report leaves it out: its foot already says "Web search: off".
+SEARCH_OFF_WARNING = (
+    "Web search was disabled: no citation was verified, and claims about prior "
+    "work were suppressed rather than guessed."
+)
+
 #: How many lenses to run at once. The passes are independent — only the
 #: consolidation needs all of them — so running them in sequence wastes most of
 #: the wall clock.
@@ -164,10 +171,7 @@ class Reviewer:
             # Without search this pass cannot verify anything, so it is told not
             # to claim it has. Left unsaid, it asserts prior art from memory.
             instruction = f"{instruction}\n{NO_SEARCH_CAVEAT}"
-            self.backend.note(
-                "Web search was disabled: no citation was verified, and claims "
-                "about prior work were suppressed rather than guessed."
-            )
+            self.backend.note(SEARCH_OFF_WARNING)
         parts = (
             manuscript.parts
             if review_pass.needs_figures

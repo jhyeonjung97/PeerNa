@@ -143,9 +143,10 @@ def _appendix_lines(report: RefereeReport, result: ReviewResult, model_label: st
         lines.append("")
     lines += [
     ]
-    if result.warnings:
+    shown = report_warnings(result.warnings)
+    if shown:
         lines += ["**Run warnings**", ""]
-        for w in dict.fromkeys(result.warnings):
+        for w in shown:
             lines += [w, ""]
     lines += [
         f"_{AI_DISCLOSURE}_",
@@ -405,11 +406,12 @@ def render_html(
         out.append("</ul>")
 
     # How the run went, then how sure it was, then what made it.
-    if result.warnings:
+    shown = report_warnings(result.warnings)
+    if shown:
         # Paragraphs, not a list: there is usually one, and a lone bullet
         # looked like a stray mark.
         out.append("<h2>Run warnings</h2>")
-        out.extend(f'<p class="warning">{e(w)}</p>' for w in dict.fromkeys(result.warnings))
+        out.extend(f'<p class="warning">{e(w)}</p>' for w in shown)
 
     out.append(f'<p class="disclosure">{e(AI_DISCLOSURE)}</p>')
     out.append(f'<p class="disclosure provenance">'
@@ -435,6 +437,14 @@ def _citations_were_searched(result: ReviewResult) -> bool:
     section as it always was.
     """
     return result.web_search is not False
+
+
+def report_warnings(warnings: list[str] | None) -> list[str]:
+    """The run's warnings as the report prints them: once each, and without the
+    one the provenance line already makes ("Web search: off")."""
+    from .review import SEARCH_OFF_WARNING
+
+    return [w for w in dict.fromkeys(warnings or []) if w != SEARCH_OFF_WARNING]
 
 
 def _credit_sources(result: ReviewResult) -> list[str]:

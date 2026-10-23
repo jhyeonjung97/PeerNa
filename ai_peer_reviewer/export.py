@@ -325,9 +325,12 @@ def to_docx(report: RefereeReport, manuscript_name: str, model_label: str,
                 detail.paragraph_format.left_indent = Pt(36)  # under the bullet's text
                 detail.runs[0].font.size = Pt(10)
 
+    from .render import report_warnings
+
+    warnings = report_warnings(warnings)
     if warnings:
         document.add_paragraph().add_run("Run warnings").bold = True
-    for warning in dict.fromkeys(warnings or []):
+    for warning in warnings:
         entry = document.add_paragraph(warning)
         entry.runs[0].font.size = Pt(9.5)
         entry.runs[0].font.color.rgb = RGBColor(0xA0, 0x2C, 0x2C)
