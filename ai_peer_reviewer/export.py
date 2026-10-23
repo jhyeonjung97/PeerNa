@@ -166,42 +166,6 @@ def _print_pdf(html_text: str) -> bytes | None:
         return target.read_bytes() if target.is_file() else None
 
 
-#: A Word watermark is a VML shape parked in the page header, which is what puts
-#: it behind the text on every page. python-docx has no API for this, so the
-#: shape is written as XML — the same markup Word itself produces for its
-#: built-in text watermarks.
-WATERMARK_XML = """<w:p xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
-  <w:r>
-    <w:pict xmlns:v="urn:schemas-microsoft-com:vml"
-            xmlns:o="urn:schemas-microsoft-com:office:office">
-      <v:shapetype id="_x0000_t136" coordsize="21600,21600" o:spt="136" adj="10800"
-                   path="m@7,l@8,m@5,21600l@6,21600e">
-        <v:formulas>
-          <v:f eqn="sum #0 0 10800"/><v:f eqn="prod #0 2 1"/>
-          <v:f eqn="sum 21600 0 @1"/><v:f eqn="sum 0 0 @2"/>
-          <v:f eqn="sum 21600 0 @3"/><v:f eqn="if @0 @3 0"/>
-          <v:f eqn="if @0 21600 @1"/><v:f eqn="if @0 0 @2"/>
-          <v:f eqn="if @0 @4 21600"/><v:f eqn="mid @5 @6"/>
-          <v:f eqn="mid @8 @5"/><v:f eqn="mid @7 @8"/>
-          <v:f eqn="mid @6 @7"/><v:f eqn="sum @6 0 @5"/>
-        </v:formulas>
-        <v:path textpathok="t" o:connecttype="custom"
-                o:connectlocs="@9,0;@10,10800;@11,21600;@12,10800"/>
-        <v:textpath on="t" fitshape="t"/>
-      </v:shapetype>
-      <v:shape id="PeerNaWatermark" type="#_x0000_t136"
-               style="position:absolute;margin-left:0;margin-top:0;width:400pt;height:130pt;
-                      rotation:315;z-index:-251654144;mso-position-horizontal:center;
-                      mso-position-horizontal-relative:margin;mso-position-vertical:center;
-                      mso-position-vertical-relative:margin"
-               fillcolor="#d8d2ca" stroked="f">
-        <v:textpath style="font-family:&quot;Calibri&quot;;font-size:1pt" string="PeerNa"/>
-      </v:shape>
-    </w:pict>
-  </w:r>
-</w:p>"""
-
-
 def _page_numbers(document) -> None:
     """A centred PAGE field in each footer. python-docx has no API for fields."""
     from docx.enum.text import WD_ALIGN_PARAGRAPH
@@ -226,18 +190,62 @@ def _page_numbers(document) -> None:
             run._r.append(element)
 
 
+#: Ink for the Word watermark. Word draws the picture opaque, so the faintness is
+#: in the colour: about 10% of the mark's grey over white, a shade darker than
+#: the PDF's because Word's page renders lighter on screen.
+WORD_WATERMARK_INK = "#efeeec"
+
+
 def _watermark(document) -> None:
-    """Put the PeerNa mark behind every page."""
+    """Put the PeerNa mark behind the text of every page.
+
+    It used to be a VML text watermark, the markup Word writes for its own. Word
+    for Windows draws those; Word for Mac, Pages and Google Docs mostly do not,
+    so the mark was missing for most readers, and it was the word "PeerNa" where
+    the PDF has the logo. Now it is the logo as a picture, anchored behind the
+    text in the header in DrawingML, which every current reader draws.
+    """
+    import io
+
+    import pymupdf
     from docx.oxml import parse_xml
-    from docx.shared import Pt
+    from docx.shared import Cm, Pt
+
+    from .render import _logo
+
+    svg = pymupdf.open(stream=_logo(WORD_WATERMARK_INK).encode(), filetype="svg")
+    png = svg[0].get_pixmap(dpi=300, alpha=True).tobytes("png")
 
     for section in document.sections:
         section.header.is_linked_to_previous = False
-        header = section.header
-        header._element.append(parse_xml(WATERMARK_XML))
-        # The header's own empty paragraph would otherwise push the text down.
-        for paragraph in header.paragraphs:
-            paragraph.paragraph_format.space_after = Pt(0)
+        paragraph = section.header.paragraphs[0]
+        paragraph.paragraph_format.space_after = Pt(0)
+        run = paragraph.add_run()
+        run.add_picture(io.BytesIO(png), width=Cm(7))
+        inline = run._r.find(".//{http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing}inline")
+        if inline is None:
+            continue
+        # Turn the inline picture into one anchored to the page centre, behind
+        # the text, taking no space: what Word calls "Behind Text".
+        extent = inline.find("{http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing}extent")
+        cx, cy = extent.get("cx"), extent.get("cy")
+        graphic = inline.find("{http://schemas.openxmlformats.org/drawingml/2006/main}graphic")
+        doc_pr = inline.find("{http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing}docPr")
+        anchor = parse_xml(
+            '<wp:anchor xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" '
+            'distT="0" distB="0" distL="0" distR="0" simplePos="0" relativeHeight="0" '
+            'behindDoc="1" locked="1" layoutInCell="1" allowOverlap="1">'
+            '<wp:simplePos x="0" y="0"/>'
+            '<wp:positionH relativeFrom="page"><wp:align>center</wp:align></wp:positionH>'
+            '<wp:positionV relativeFrom="page"><wp:align>center</wp:align></wp:positionV>'
+            f'<wp:extent cx="{cx}" cy="{cy}"/><wp:effectExtent l="0" t="0" r="0" b="0"/>'
+            '<wp:wrapNone/></wp:anchor>'
+        )
+        anchor.append(doc_pr)
+        anchor.append(parse_xml(
+            '<wp:cNvGraphicFramePr xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"/>'))
+        anchor.append(graphic)
+        inline.getparent().replace(inline, anchor)
 
 
 def to_docx(report: RefereeReport, manuscript_name: str, model_label: str,
