@@ -237,6 +237,67 @@ FORMATS = {
 }
 
 
+def _result_of(job: dict):
+    """The finished review rebuilt from what the job stored, or None.
+
+    What the report looks like is decided when it is rendered, so rendering from
+    the stored structure gives every review the current layout rather than the
+    one it was first drawn with. The credit list of corpus papers is the one
+    part not in the structure: newer jobs store it, older ones keep it only in
+    their HTML and it is read back from there.
+    """
+    import html as html_lib
+    import re
+
+    from .backends import Usage
+    from .review import ReviewResult
+    from .schema import RefereeReport
+
+    stored = job.get("report")
+    if not stored:
+        return None
+    sources = job.get("sources")
+    if sources is None:
+        block = re.search(r'<ul class="credit">(.*?)</ul>', job.get("html") or "", re.S)
+        sources = "\n".join(
+            html_lib.unescape(item) for item in re.findall(r"<li>(.*?)</li>", block.group(1), re.S)
+        ) if block else ""
+    try:
+        return ReviewResult(
+            report=RefereeReport.model_validate(stored),
+            pass_notes={"precedent_sources": sources},
+            usage=Usage(),
+            warnings=list(job.get("warnings") or []),
+            web_search=job.get("web_search"),
+            finished_at=(job.get("started_at") or 0) + (job.get("duration") or 0) or None,
+        )
+    except Exception:  # noqa: BLE001 - a stored report that no longer validates
+        return None
+
+
+def current_html(job: dict) -> str:
+    """The report as HTML in today's layout, falling back to what was stored."""
+    result = _result_of(job)
+    if result is None:
+        return job.get("html") or ""
+    try:
+        return render_html(result, job.get("filename", "manuscript"), "referee",
+                           job.get("model_label") or "")
+    except Exception:  # noqa: BLE001
+        return job.get("html") or ""
+
+
+def current_markdown(job: dict) -> str:
+    result = _result_of(job)
+    if result is None:
+        return job.get("markdown") or ""
+    try:
+        return render(result, job.get("filename", "manuscript"), "referee",
+                      job.get("model_label") or "")
+    except Exception:  # noqa: BLE001
+        return job.get("markdown") or ""
+
+
 def convert(job: dict, fmt: str) -> bytes | None:
     """Render the stored report as PDF or Word.
 
@@ -247,7 +308,7 @@ def convert(job: dict, fmt: str) -> bytes | None:
     from . import export
 
     if fmt == "pdf":
-        return export.to_pdf(job["html"])
+        return export.to_pdf(current_html(job))
     if fmt == "docx":
         stored = job.get("report")
         if not stored:
@@ -349,6 +410,7 @@ def _run_review(job_id: str, path: Path, spec, web_search: bool,
             html=render_html(result, display_name, "referee", spec.label),
             markdown=render(result, display_name, "referee", spec.label),
             report=result.report.model_dump(),
+            sources=result.pass_notes.get("precedent_sources") or "",
             model_label=spec.label,
             cost=round(result.usage.cost(spec), 4),
             warnings=list(dict.fromkeys(result.warnings)),
@@ -615,11 +677,14 @@ class Handler(BaseHTTPRequestHandler):
             if not job or not self._may_see(job):
                 # Not "forbidden": a 403 would confirm the id names something.
                 return self._json(404, {"error": "No such job."})
+            shown = dict(job)
+            if shown.get("status") == "done":
+                shown["html"] = current_html(job)
             return self._json(
                 200,
                 {
                     k: v
-                    for k, v in job.items()
+                    for k, v in shown.items()
                     if k in ("status", "step", "total", "stage", "error", "cost",
                              "warnings", "html", "started_at", "duration",
                              "tokens", "web_search", "filename", "supplementary",
@@ -813,9 +878,9 @@ class Handler(BaseHTTPRequestHandler):
 
         stem = Path(job.get("filename", "review")).stem
         if fmt == "html":
-            body = job["html"].encode()
+            body = current_html(job).encode()
         elif fmt == "md":
-            body = (job.get("markdown") or "").encode()
+            body = current_markdown(job).encode()
             if not body:
                 return self._json(404, {"error": "Markdown is not stored for this run."})
         else:
