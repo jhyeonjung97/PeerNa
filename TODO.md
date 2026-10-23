@@ -106,7 +106,7 @@ the answers away and only 10 of them were in the field.
 **The real test is ready.** 560 Research Square "In Review" manuscripts, the
 text the referees read, each with its own referee reports as the answer key,
 about 310 in the field (DECISIONS: A test set of manuscripts as submitted).
-Files are in `~/.cache/ai-peer-reviewer/rsquare/`: `pdf-clean/` holds the
+Files are in `~/PeerNa-data/rsquare/`: `pdf-clean/` holds the
 manuscripts with the publication stamp redacted, `testset.slugs` the list.
 
 In order:
@@ -120,8 +120,8 @@ In order:
    fits the 2 GB Render disk.
 3. **Run it.**
 
-       python -m tools.precedent_eval ~/.cache/ai-peer-reviewer/rsquare/pdf-clean OUT \
-           --slugs ~/.cache/ai-peer-reviewer/rsquare/testset.slugs --submitted
+       python -m tools.precedent_eval ~/PeerNa-data/rsquare/pdf-clean OUT \
+           --slugs ~/PeerNa-data/rsquare/testset.slugs --submitted
 
    Web search stays off (it finds the published paper). About $28. Report the
    field subset and the years separately: the papers are from 2020 to 2026 and
