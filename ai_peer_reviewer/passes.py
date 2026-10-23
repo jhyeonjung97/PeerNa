@@ -285,6 +285,48 @@ Write your findings as prose, and say explicitly which expectations this
 manuscript already satisfies — that is as useful to the author as the gaps.
 """
 
+PARTS_INSTRUCTION = """\
+Before this manuscript is checked against what referees have asked of similar
+work, break it down. Name the methods, measurements, and central claims its
+conclusions rest on, each with where it appears. These are used as search terms
+against a collection of real referee reports, so name each the way a referee in
+the field would, and specifically enough that a comment about the same kind of
+work would match it.
+"""
+
+PARTWISE_PRECEDENT_INSTRUCTION = """\
+This manuscript has been broken into the methods, measurements, and claims its
+conclusions rest on. Under each one below are comments real referees wrote about
+the same kind of work in *other* papers. They are reference material, nothing
+more: none of them is a finding about this manuscript.
+
+Go through the parts one at a time. For each:
+
+1. Read what referees asked of that kind of work — which controls, which
+   measurements, which quantifications they took for granted. Ignore any
+   precedent that is about something else; the search that found them is loose.
+2. Go to the place in this manuscript the part points to and check whether it
+   meets that expectation. Name the page, figure, or table you looked at.
+3. If it does, say so in a line and move on. That is the common case and it is
+   not a finding.
+4. If it does not, ask whether the gap undermines a claim *this* paper makes. A
+   missing measurement that nothing depends on is not a problem. Only if it is
+   both absent and load-bearing, write it up.
+
+Never carry a precedent comment across as though it were about this manuscript.
+"A reviewer asked another paper for ICP data" is not evidence that this paper
+lacks ICP data. If you cannot point to where in this manuscript the gap is, you
+have not established that there is one.
+
+Write every point in your own words. These comments were published under a
+licence that allows them to be reused and requires the source to be credited if
+they are; quoting one into a report about a different paper would make the report
+a republication of someone else's review. Take the expectation, leave the
+sentence.
+
+Write your findings as prose, grouped by part.
+"""
+
 SYNTHESIS_INSTRUCTION = """\
 Below are your notes from four separate readings of this manuscript. Write them
 up as a referee report.

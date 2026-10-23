@@ -23,6 +23,8 @@ from .passes import (
     MECHANICAL_INSTRUCTION,
     VERDICT_INSTRUCTION,
     NO_SEARCH_CAVEAT,
+    PARTS_INSTRUCTION,
+    PARTWISE_PRECEDENT_INSTRUCTION,
     PASSES,
     PRECEDENT_INSTRUCTION,
     SYNTHESIS_INSTRUCTION,
@@ -36,7 +38,15 @@ from .passes import (
 #: burying the manuscript under other people's reviews.
 PRECEDENT_PAPERS = 6
 PRECEDENT_COMMENTS = 120
-from .schema import Mismatches, RefereeReport, Verdict
+
+#: The same, part by part. Ten parts at eight comments is eighty, under the
+#: paper-by-paper budget, and every one was found for a reason. The topic set
+#: is wide on purpose: it only has to rule out other fields, and a method's
+#: best precedent is often in a paper about a different material.
+PRECEDENT_PARTS = 10
+PRECEDENT_PER_PART = 8
+PRECEDENT_TOPIC_PAPERS = 150
+from .schema import Mismatches, Parts, RefereeReport, Verdict
 
 #: How many lenses to run at once. The passes are independent — only the
 #: consolidation needs all of them — so running them in sequence wastes most of
@@ -181,24 +191,105 @@ class Reviewer:
     def precedent_pass(self, manuscript: Manuscript) -> str:
         """Check the manuscript against what referees expect of nearby work.
 
-        Silently skipped when the corpus index has not been built — the review
-        is still complete without it, just without the field-specific layer.
+        Part by part when the comment index is built: break the manuscript into
+        what it does, find what referees asked of each of those things in other
+        papers, and check each against the place it appears here. Otherwise
+        paper by paper, as before — the comments on the nearest papers, whole.
+        Silently skipped when neither index exists — the review is still
+        complete without it, just without the field-specific layer.
         """
-        from .corpus_index import similar
-
-        text = _leading_text(manuscript)
-        if not text:
-            return ""
         try:
-            neighbours = similar(text, k=PRECEDENT_PAPERS)
+            found = self.precedents_by_part(manuscript)
+            if found is None:
+                found = self.precedents_by_paper(manuscript)
         except Exception as exc:
             self.backend.warnings.append(
                 f"Could not consult the corpus index ({type(exc).__name__}); "
                 "the field-specific pass was skipped."
             )
             return ""
-        if not neighbours:
+        if found is None:
             return ""
+        instruction, material, slugs = found
+
+        # Kept as DOI and title so the report can credit them. The referee
+        # reports these came from are published under CC BY 4.0, which permits
+        # exactly this use and asks for the source in return. The referees are
+        # anonymous, so the source is the paper and the journal.
+        titles = _titles(slugs)
+        self.notes["precedent_sources"] = "\n".join(
+            f"10.1038/{slug} — {titles.get(slug, '')[:110]}" for slug in slugs
+        )
+        return self.backend.run_text(
+            self.system,
+            as_text_only(manuscript.parts),
+            f"{instruction}\n{material}",
+            False,
+            "medium",
+            "Field expectations",
+        )
+
+    def precedents_by_part(
+        self, manuscript: Manuscript, exclude: str = ""
+    ) -> "tuple[str, str, list[str]] | None":
+        """What referees asked of each thing this manuscript does.
+
+        Returns the instruction, the precedents grouped under the part they were
+        found for, and the papers they came from; None when there is no comment
+        index to search. `exclude` keeps a paper's own reports out, for testing
+        on papers that are in the corpus.
+        """
+        from .corpus_index import has_comment_index, nearest_papers, precedents
+
+        if not has_comment_index():
+            return None
+        breakdown = self.backend.run_structured(
+            self.system, as_text_only(manuscript.parts), PARTS_INSTRUCTION, Parts
+        )
+        parts = breakdown.parts[:PRECEDENT_PARTS]
+        if not parts:
+            return None
+        self.notes["parts"] = "\n".join(f"- {p.what} ({p.where})" for p in parts)
+
+        # The topic narrows the search before the parts do. Without it a part
+        # like "long-term stability test" matches the stability of a protein as
+        # readily as that of a catalyst.
+        nearby = nearest_papers(
+            f"{breakdown.topic}\n{_leading_text(manuscript)}",
+            PRECEDENT_TOPIC_PAPERS,
+            exclude,
+        )
+        found = precedents(
+            [p.what for p in parts],
+            papers=[slug for slug, _ in nearby] or None,
+            k=PRECEDENT_PER_PART,
+            exclude=exclude,
+        )
+        lines, slugs = [], []
+        for part, comments in zip(parts, found):
+            lines.append(f"\n=== Part: {part.what} — in this manuscript at {part.where} ===")
+            if not comments:
+                lines.append("(no close precedent in the corpus)")
+            for c in comments:
+                lines.append(f"- {c.text[:600]}")
+                if c.slug not in slugs:
+                    slugs.append(c.slug)
+        if not slugs:
+            return None
+        return PARTWISE_PRECEDENT_INSTRUCTION, "\n".join(lines), slugs
+
+    def precedents_by_paper(
+        self, manuscript: Manuscript, exclude: str = ""
+    ) -> "tuple[str, str, list[str]] | None":
+        """Every comment on the papers nearest this one, as reference material."""
+        from .corpus_index import similar
+
+        text = _leading_text(manuscript)
+        if not text:
+            return None
+        neighbours = similar(text, k=PRECEDENT_PAPERS, exclude=exclude)
+        if not neighbours:
+            return None
 
         lines, budget = [], PRECEDENT_COMMENTS
         for n in neighbours:
@@ -206,21 +297,7 @@ class Reviewer:
             for c in n.comments[: max(1, budget // len(neighbours))]:
                 lines.append(f"- {c[:600]}")
                 budget -= 1
-        # Kept as DOI and title so the report can credit them. The referee
-        # reports these came from are published under CC BY 4.0, which permits
-        # exactly this use and asks for the source in return. The referees are
-        # anonymous, so the source is the paper and the journal.
-        self.notes["precedent_sources"] = "\n".join(
-            f"10.1038/{n.slug} — {n.title[:110]}" for n in neighbours
-        )
-        return self.backend.run_text(
-            self.system,
-            as_text_only(manuscript.parts),
-            f"{PRECEDENT_INSTRUCTION}\n{chr(10).join(lines)}",
-            False,
-            "medium",
-            "Field expectations",
-        )
+        return PRECEDENT_INSTRUCTION, "\n".join(lines), [n.slug for n in neighbours]
 
     def synthesise(self, manuscript: Manuscript) -> RefereeReport:
         joined = "\n\n".join(
@@ -588,6 +665,23 @@ def _leading_text(manuscript: Manuscript, limit: int = 6000) -> str:
         if isinstance(part, TextPart) and part.text.strip():
             return part.text[:limit]
     return ""
+
+
+def _titles(slugs: list[str]) -> dict[str, str]:
+    import sqlite3
+
+    from .corpus_index import DB_PATH
+
+    if not slugs:
+        return {}
+    connection = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True, timeout=10.0)
+    try:
+        marks = ",".join("?" * len(slugs))
+        return dict(connection.execute(
+            f"SELECT slug, title FROM papers WHERE slug IN ({marks})", slugs
+        ))
+    finally:
+        connection.close()
 
 
 def _combine(prior: dict, current: Usage) -> Usage:

@@ -28,7 +28,21 @@ DB_PATH = INDEX_DIR / "corpus.sqlite"
 VECTORS_PATH = INDEX_DIR / "vectors.npy"
 IDS_PATH = INDEX_DIR / "ids.json"
 
+#: One vector per referee comment, alongside the one per paper above. A paper's
+#: nearest neighbours carry every comment their referees wrote — the XPS fit,
+#: the stability test, the typo on page 3 — and only some of those are about
+#: anything this manuscript does. Searching the comments themselves finds the
+#: ones written about the same method or the same kind of claim.
+COMMENT_VECTORS_PATH = INDEX_DIR / "comment_vectors.npy"
+COMMENT_IDS_PATH = INDEX_DIR / "comment_ids.json"
+
 EMBED_MODEL = "text-embedding-3-small"
+
+#: Comment vectors are cut to 512 dimensions and stored as float16. At the full
+#: 1536 in float32, 140,000 comments come to 860 MB, which does not fit beside
+#: the database on the 2 GB deployed disk; at this size they are 143 MB. The
+#: model is trained so a prefix of its vector stays a usable embedding.
+COMMENT_DIMENSIONS = 512
 
 #: A peer review file interleaves each reviewer comment with the authors' reply
 #: to it. Splitting on the reviewer heading alone leaves the reply attached to
@@ -56,6 +70,16 @@ class Neighbour:
     title: str
     similarity: float
     comments: list[str]
+
+
+@dataclass
+class Precedent:
+    """One referee comment, from another paper, found for one part of this one."""
+
+    slug: str
+    title: str
+    text: str
+    similarity: float
 
 
 # ---------------------------------------------------------------- building
@@ -210,15 +234,23 @@ def _client():
     return openai.OpenAI()
 
 
-def embed(texts: list[str]) -> "list[list[float]]":
+def embed(texts: list[str], dimensions: int | None = None) -> "list[list[float]]":
     """Embed in batches; the API caps how much one request may carry."""
     client = _client()
+    extra = {"dimensions": dimensions} if dimensions else {}
     out: list[list[float]] = []
     for start in range(0, len(texts), 96):
         chunk = [t[:8000] or " " for t in texts[start:start + 96]]
-        reply = client.embeddings.create(model=EMBED_MODEL, input=chunk)
+        reply = client.embeddings.create(model=EMBED_MODEL, input=chunk, **extra)
         out.extend(item.embedding for item in reply.data)
     return out
+
+
+def _unit(rows):
+    import numpy as np
+
+    rows = np.asarray(rows, dtype="float32")
+    return rows / (np.linalg.norm(rows, axis=-1, keepdims=True) + 1e-12)
 
 
 def load_vectors():
@@ -229,23 +261,34 @@ def load_vectors():
     return np.load(VECTORS_PATH), json.loads(IDS_PATH.read_text())
 
 
-def similar(text: str, k: int = 5) -> list[Neighbour]:
-    """The k corpus papers closest to this text, with their reviewer comments."""
+def nearest_papers(text: str, k: int, exclude: str = "") -> list[tuple[str, float]]:
+    """Slugs of the k papers whose title and abstract sit closest to this text."""
     import numpy as np
 
     vectors, ids = load_vectors()
     if vectors is None or not ids:
         return []
+    scores = vectors @ _unit(embed([text])[0])  # rows are already unit length
+    found = []
+    for position in np.argsort(-scores):
+        if ids[int(position)] == exclude:
+            continue
+        found.append((ids[int(position)], float(scores[position])))
+        if len(found) == k:
+            break
+    return found
 
-    query = np.array(embed([text])[0], dtype="float32")
-    query /= np.linalg.norm(query) or 1.0
-    scores = vectors @ query  # rows are already unit length
+
+def similar(text: str, k: int = 5, exclude: str = "") -> list[Neighbour]:
+    """The k corpus papers closest to this text, with their reviewer comments."""
+    nearest = nearest_papers(text, k, exclude)
+    if not nearest:
+        return []
 
     connection = sqlite3.connect(DB_PATH)
     try:
         found = []
-        for position in np.argsort(-scores)[:k]:
-            slug = ids[int(position)]
+        for slug, score in nearest:
             row = connection.execute(
                 "SELECT title FROM papers WHERE slug = ?", (slug,)
             ).fetchone()
@@ -255,9 +298,98 @@ def similar(text: str, k: int = 5) -> list[Neighbour]:
                     (slug,),
                 )
             ]
-            found.append(
-                Neighbour(slug, row[0] if row else slug, float(scores[position]), comments)
-            )
+            found.append(Neighbour(slug, row[0] if row else slug, score, comments))
         return found
+    finally:
+        connection.close()
+
+
+_comment_index: tuple | None = None
+
+
+def load_comment_vectors():
+    """Comment vectors with the rowid and paper of each, or None if not built.
+
+    Held for the life of the process: at 143 MB, reading it once per review
+    would cost more than the search it serves.
+    """
+    global _comment_index
+    import numpy as np
+
+    if _comment_index is None and COMMENT_VECTORS_PATH.is_file():
+        ids = json.loads(COMMENT_IDS_PATH.read_text())
+        _comment_index = (
+            np.load(COMMENT_VECTORS_PATH),
+            np.array(ids["rowid"]),
+            np.array(ids["slug"]),
+        )
+    return _comment_index
+
+
+def has_comment_index() -> bool:
+    return COMMENT_VECTORS_PATH.is_file()
+
+
+def precedents(
+    queries: list[str],
+    papers: list[str] | None = None,
+    k: int = 8,
+    exclude: str = "",
+) -> list[list[Precedent]]:
+    """For each query, the k referee comments written closest to it.
+
+    A query describes one thing a manuscript does — a method, a measurement, a
+    claim — and the comments found are ones referees wrote about that kind of
+    thing in other papers. `papers` limits the search to comments on those
+    papers, which keeps a query like "stability test" from pulling in the
+    stability of a protein when the manuscript is about a catalyst. A comment
+    already found for an earlier query is not returned again, so two parts that
+    overlap do not show the same precedent twice. Matching is on the text, not
+    the row: a review file often repeats a comment — quoted again above the
+    authors' reply, or carried into the second round — and parses to two rows.
+    """
+    import numpy as np
+
+    index = load_comment_vectors()
+    if index is None or not queries:
+        return [[] for _ in queries]
+    vectors, rowids, slugs = index
+
+    allowed = slugs != exclude
+    if papers is not None:
+        allowed &= np.isin(slugs, list(papers))
+    candidates = np.flatnonzero(allowed)
+    if not candidates.size:
+        return [[] for _ in queries]
+
+    asked = _unit(embed(queries, dimensions=COMMENT_DIMENSIONS))
+    scores = asked @ vectors[candidates].astype("float32").T
+
+    connection = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True, timeout=10.0)
+    try:
+        titles = dict(connection.execute("SELECT slug, title FROM papers"))
+        taken: set[str] = set()
+        out: list[list[Precedent]] = []
+        for row in scores:
+            found: list[Precedent] = []
+            for position in np.argsort(-row):
+                rowid = int(rowids[candidates[position]])
+                text = connection.execute(
+                    "SELECT text FROM comments WHERE rowid = ?", (rowid,)
+                ).fetchone()
+                if not text:
+                    continue
+                key = " ".join(text[0].lower().split())[:300]
+                if key in taken:
+                    continue
+                taken.add(key)
+                slug = str(slugs[candidates[position]])
+                found.append(
+                    Precedent(slug, titles.get(slug, slug), text[0], float(row[position]))
+                )
+                if len(found) == k:
+                    break
+            out.append(found)
+        return out
     finally:
         connection.close()

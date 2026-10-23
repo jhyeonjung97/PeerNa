@@ -124,6 +124,43 @@ class Verdict(BaseModel):
     )
 
 
+class Part(BaseModel):
+    """One thing the manuscript does that a referee could hold it to account for."""
+
+    what: str = Field(
+        description="The method, measurement, or claim, named the way a referee "
+        "in the field would name it and specific enough to search on: 'DFT+U "
+        "adsorption energies of *OH on doped RuO2', not 'calculations'; "
+        "'long-term stability at 10 mA/cm2 in acid', not 'stability'. One "
+        "sentence, in your own words, with no sample names, numbers or authors."
+    )
+    where: str = Field(
+        description="Where in the manuscript it is: page, section, figure or "
+        "table. As specific as the manuscript allows."
+    )
+
+
+class Parts(BaseModel):
+    """What the manuscript does, broken down so each piece can be checked alone.
+
+    A paper is close to its neighbours in topic and still differs from them in
+    method, and the referee comments that matter follow the method. Searching
+    the corpus by the whole abstract found the right papers and handed over
+    their comments wholesale; searching by each part finds the comments written
+    about that part.
+    """
+
+    topic: str = Field(
+        description="The subject of the paper in one sentence, as a referee in "
+        "the field would put it."
+    )
+    parts: list[Part] = Field(
+        description="Five to ten methods, measurements, or central claims — the "
+        "ones the conclusions rest on, most important first. Leave out routine "
+        "characterisation nothing depends on."
+    )
+
+
 class Mismatch(BaseModel):
     """One pairing that does not hold up."""
 
