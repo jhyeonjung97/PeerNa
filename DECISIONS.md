@@ -4,7 +4,7 @@ Why the tool is built the way it is. Most of these were settled by measurement,
 and several overturned what seemed obvious beforehand — those are the ones worth
 reading before changing anything.
 
-Last updated 2026-08-26.
+Last updated 2026-10-22.
 
 ---
 
@@ -724,3 +724,140 @@ is an *important* one, and this did not ask it.
 
 So one result, not three. The defect count is the only one with an answer key
 that does not depend on the judge's taste.
+
+---
+
+## Precedents part by part
+
+The precedent pass used to embed the abstract, take the six nearest papers and
+hand over every comment their referees wrote, up to 120. Most of those comments
+concern something the manuscript does not do. It now breaks the manuscript into
+the five to ten methods, measurements and claims its conclusions rest on, each
+with where it appears; narrows the corpus to the 150 papers nearest in topic; and
+within those finds the eight referee comments closest to each part. The check
+then goes part by part, to the location the part names.
+
+That needs one vector per comment. 120,342 comments at 512 dimensions in float16
+are 143 MB, beside the 381 MB database on the 2 GB deployed disk; at the full
+1536 in float32 they would not fit. Embedding them cost about $0.35. Without the
+comment index the pass falls back to paper by paper.
+
+### The pilot on published text: no difference
+
+126 papers published in June and July 2026, after the predictor's training
+cutoff and outside the index. Each arm predicted twelve referee requests; Sonnet
+5.5 marked all thirty-six, shuffled and unlabelled, against the paper's own
+referee comments. 121 were judged.
+
+| | mean hits / 12 |
+|---|---|
+| manuscript alone | 2.45 |
+| plus nearest papers' comments | 2.40 |
+| plus comments found part by part | 2.50 |
+
+Part against paper 37–32 with 52 ties (p=0.63); part against alone 33–33. Not a
+result, and not the test either, for two reasons. The manuscripts were the
+published versions, which carry the answers ("we added ICP-MS"), and that helps
+the manuscript-alone arm most. And only 10 of the 126 were in the corpus's field.
+
+**Judging cost.** Sonnet 5 with its default thinking ran past 16,000 output
+tokens on some papers, most of the cost of judging. Sonnet 5.5 with thinking off
+(`{"type": "between_tools"}`) costs about $0.02 a paper; the answer is one list
+of ids.
+
+---
+
+## A third of the corpus was not referees
+
+400 parsed comments drawn at random and labelled: 265 referee comments, 82 the
+authors' replies that the reply-marker cut had missed ("We have added...",
+"Answer 2) ..."), 43 bibliography entries, 10 fragments. In a search by method
+these surface as precedents nobody asked for. On the JACS test manuscript the
+stability part was handed "Added the concentration of metal ions in the
+electrolyte..." as a referee's demand.
+
+The labels were checked by hand before being trusted. The references were right;
+about one reply label in four was a referee's question. `is_referee_comment` is
+written to keep referee comments first and remove noise second:
+
+| | kept | dropped |
+|---|---|---|
+| referee (265) | 264 | 1 |
+| reference (43) | 4 | 39 |
+| reply (82) | 41 | 41 |
+
+Noise in what is kept falls from 34% to 17%. The strongest single signal for a
+reply is the first person plural with nothing addressed to the authors; referees
+writing in a second language use "we suggest" and "we believe", which are
+excepted. The filter runs when the comment index is built, again when a search
+returns, and on the answer key of the prediction test. Duplicates are compared
+with labels such as "Comment:" stripped, and an inline "Author reply:" now ends a
+comment.
+
+---
+
+## Consolidation was dropping points
+
+A JACS manuscript with its real reports (three referees, 13 requests), one
+Hyeonjung is an author of. The methods pass asked for convergence tests on the
+cutoff, k-points, slab and vacuum, which a referee also asked for; the final
+report did not carry it. The cutting pass was not the cause: it must return as
+many comments as it was given. The synthesis prompt said to expect twelve to
+eighteen comments, and with four readings of notes it met that by choosing.
+
+The rule now, as Hyeonjung put it: shortening is done on the wording, never by
+leaving points out. There is no target number; duplication and lack of support
+are the only reasons a point leaves. One re-run gave 19 comments against 18,
+fewer words overall, and the convergence request at item 5. One run, so the
+attribution is provisional.
+
+The final report caught about 8 of the 13 requests. It missed testing the dopant
+strategy in another matrix, the trend against O binding, a Pt/C rather than Pt
+film benchmark, and the citations a referee wanted added.
+
+---
+
+## A test set of manuscripts as submitted
+
+The prediction test has to be run on the text the referees read. Hyeonjung
+pointed out that ChemRxiv records the journal a preprint was later published in,
+so preprints published in Nature Communications give the submitted manuscript
+and its referee reports together.
+
+**ChemRxiv.** Crossref lists 32,883 of 57,783 ChemRxiv items as preprints of a
+published paper, 562 of them Nature Communications papers and 110 already in the
+corpus. Of those 110, v1 went up before the journal received the paper in 67
+cases, within 30 days in 24, later but before acceptance in 17, and after
+acceptance in 2. Usable, but the full text is not reachable: ChemRxiv's public
+API and its PDFs sit behind a Cloudflare challenge that refuses every
+programmatic client, honest user agent or not. paperscraper meets the same wall
+and falls back to Crossref for metadata. It was not circumvented.
+
+**Research Square.** Springer Nature's "In Review" option posts the manuscript
+when it is submitted. 625 of 5,961 corpus papers link a Research Square v1 in
+Crossref; 567 were posted within 30 days of receipt and before acceptance. All
+567 are CC BY. The PDFs download with an honest user agent; robots.txt allows
+crawling and reserves AI training (`ai-train=no`), which this use is not. Six
+PDFs are gone or restricted.
+
+**arXiv.** No arXiv preprint among 150 corpus papers from 2020 on, by Crossref.
+arXiv DOIs are registered with DataCite, so that undercounts, but the field does
+not post there much. Not pursued.
+
+### Two ways the answer leaks back in
+
+**Web search finds the published paper.** On the JACS manuscript the literature
+pass found the published article and recommended rejection as a duplicate. On
+three Research Square manuscripts reviewed twice, it brought the published
+version into one report with search on and into none with search off. Search
+stays off for evaluation.
+
+**The preprint is stamped once the paper is out.** Research Square adds "A
+version of this preprint was published at Nature Communications on ... See the
+published version at https://doi.org/10.1038/..." to the opening pages. The
+manuscript is unchanged, but the stamp tells the model the paper was accepted
+and where. The stamp, posting date and licence lines are redacted from the first
+three pages; one PDF where the redaction did not take is left out.
+
+The test set is 560 manuscripts, about 310 in the corpus's field, each kept out
+of its own precedent search.

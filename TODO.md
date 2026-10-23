@@ -88,31 +88,50 @@ The two supporting metrics turned out to be worth nothing:
   It measures which report is longer.
 
 So there is no evidence yet about whether the reports are *better to receive*.
-Twenty reports are on disk. Stripped of labels and shuffled, one afternoon of
-reading answers it — and a person is the only judge here who does not share a
-model family with the writer.
+The twenty reports from the ablation are gone with a temporary directory and
+have to be regenerated (~$1.50) — better from the Research Square set now, where
+real reports of the same text exist. Stripped of labels and shuffled, one
+afternoon of reading answers it, and a person is the only judge here who does
+not share a model family with the writer.
 
 Worth also re-running the model preference properly: its own call, no defect
 list, reports only. That gives a machine baseline to compare the human against.
 
-## 3. Precedent retrieval
+## 3. Precedent retrieval: the test on submitted manuscripts
 
-Never demonstrated. On 20 papers, predicting what referees would ask for from the
-corpus beat predicting from the abstract alone 4.5 to 3.9 (sign test p=0.63).
+Built part by part (DECISIONS: Precedents part by part) and still not shown to
+help. The pilot on 126 published papers found nothing, but published text gives
+the answers away and only 10 of them were in the field.
 
-Contamination is not the explanation — the model does no better on 2017–2020
-papers than recent ones, so it is not reciting reports it memorised. On the seven
-2025 papers base rates led 6.6 to 4.9, which is a post-hoc subgroup and so a
-hypothesis, but it points where you would expect: the corpus should help most
-where the model's prior is thinnest, which is the condition of every real
-submission.
+**The real test is ready.** 560 Research Square "In Review" manuscripts, the
+text the referees read, each with its own referee reports as the answer key,
+about 310 in the field (DECISIONS: A test set of manuscripts as submitted).
+Files are in `~/.cache/ai-peer-reviewer/rsquare/`: `pdf-clean/` holds the
+manuscripts with the publication stamp redacted, `testset.slugs` the list.
 
-**126 papers published after the model's May 2026 cutoff are now in the corpus.**
-Re-running the prediction test on those is the clean version of that test, and it
-is cheap. ~$0.40.
+In order:
 
-Both arms hit about a third, which says more than the comparison: predicting a
-referee is hard by any route.
+1. **Wait for the harvest** (`harvest-2026-10/`, started 2026-10-22). It roughly
+   doubles the field's papers and writes a list of held-out papers published
+   from June 2026.
+2. **Re-parse and re-index.** Re-parse `review_text` with the current reply
+   marker, rebuild the paper vectors and, with `--comments`, the comment
+   vectors, which applies `is_referee_comment` (~$0.2). Check the result still
+   fits the 2 GB Render disk.
+3. **Run it.**
+
+       python -m tools.precedent_eval ~/.cache/ai-peer-reviewer/rsquare/pdf-clean OUT \
+           --slugs ~/.cache/ai-peer-reviewer/rsquare/testset.slugs --submitted
+
+   Web search stays off (it finds the published paper). About $28. Report the
+   field subset and the years separately: the papers are from 2020 to 2026 and
+   the predictor may have read the older ones.
+4. **Decide.** If part by part wins, merge `method-level-precedent` and put the
+   comment index on the Render disk. If nothing wins, the retrieval needs
+   rethinking before anything else is built on it.
+
+Both arms of the old 20-paper test hit about a third, and the pilot about a
+fifth with a stricter judge: predicting a referee is hard by any route.
 
 ## 4. Give it to a few postdocs
 
@@ -124,16 +143,10 @@ Worth doing while it still runs on this laptop: a handful of people need no
 sign-in, no payment and no spending cap, and their reaction decides whether any
 of that gets built.
 
-## 5. Score on preprints — later
+## 5. Score on preprints — now §3
 
-The principled version of the head-to-head. A ChemRxiv or bioRxiv preprint later
-published with a transparent review file gives a manuscript and a referee report
-describing *the same text*, which the corpus cannot.
-
-Deferred because preprint coverage in chemistry is thin (a fifth to a third), the
-posted version is not always what was submitted, and the preprint→publication
-mapping is its own piece of work. Worth doing when the comparison is worth running
-on twenty papers rather than three.
+Done by another route than planned: Research Square rather than ChemRxiv, whose
+full text is behind a Cloudflare challenge. See §3.
 
 ## 6. Sharing it with other people
 
@@ -174,11 +187,13 @@ The router is gone — out of the menu, the registry and the blueprint. A
 configuration that still names an `r-` model runs its direct equivalent, so
 nothing breaks, but the name should be changed where it is set.
 
-**Still to check:**
+The dashboard is cleaned up: `MONO_ROURTER_API_KEY` is gone, the model is `luna`,
+and `AI_PEER_REVIEWER_CONTACT` is set. **Still to check:** that a review
+completes end to end on Render.
 
-- A review actually completes on `luna` on Render, with `OPENAI_API_KEY` set in
-  the dashboard and `MONO_ROURTER_API_KEY` deleted there.
-- `ANTHROPIC_API_KEY` is set on Render if the Claude models are wanted.
+The Anthropic account has a monthly spend limit, separate from its credit
+balance. When it is reached every Claude call fails until the month turns, while
+the menu still shows the models as available.
 
 ## 8. Smaller things
 
@@ -189,11 +204,20 @@ nothing breaks, but the name should be changed where it is set.
 - **LaTeX input.** The form accepts `.tex` but nothing has been through end to
   end — in particular whether `\input` files and the bibliography survive, since
   a `.tex` upload arrives without its directory.
-- **Full-text corpus.** 3,853 papers, 139,703 comments, text only. The PDFs were
+- **Model registry.** Sonnet 5.5, Opus 5.5 and Haiku 5.5 are not in
+  `models.py`, and Sonnet 5 is priced at $3 / $15 where it is $2 / $10.
+- **Consolidation.** One re-run says the count target was dropping points
+  (DECISIONS: Consolidation was dropping points). Check across the Research
+  Square set that nothing a pass found goes missing from the report.
+- **Remaining corpus noise.** 17% of what is kept is still not a referee. A
+  model pass over every comment would remove most of it, ~$5–10.
+- **Full-text corpus.** 4,500+ papers and growing, text only. The PDFs were
   not kept; `tools/download_corpus.py` is standalone and resumable if a machine
   with the disk turns up (~800 GB for everything, ~330 GB for reports alone).
-- **No remote for this repository.** It used to sit in Drive and be backed up by
-  it. `DECISIONS.md` is not reproducible.
+- **Working files outside the repository.** Test sets, labels and run outputs
+  live under `~/.cache/ai-peer-reviewer/`. The scratch directory used before
+  2026-10-22 was wiped, taking the ablation reports with it; nothing that a
+  result depends on should live there.
 
 ## 9. Licensing — resolved, with one thing to keep doing
 
