@@ -37,7 +37,44 @@ def _chrome() -> str | None:
 
 
 def to_pdf(html_text: str) -> bytes | None:
-    """Print the report with a headless browser, falling back to LibreOffice."""
+    """Print the report with a headless browser, falling back to LibreOffice,
+    then to PyMuPDF's own HTML layout.
+
+    The last is what the deployed container uses: it has neither browser nor
+    LibreOffice, and installing Chromium would add hundreds of megabytes to an
+    instance with 512 MB of memory. PyMuPDF is already a dependency. Its CSS is
+    simpler than a browser's, which costs some typography and nothing else.
+    """
+    printed = _print_pdf(html_text)
+    return printed if printed is not None else _layout_pdf(html_text)
+
+
+def _layout_pdf(html_text: str) -> bytes | None:
+    import io
+
+    try:
+        import pymupdf
+
+        buffer = io.BytesIO()
+        writer = pymupdf.DocumentWriter(buffer)
+        story = pymupdf.Story(html=html_text)
+        page = pymupdf.paper_rect("a4")
+        body = page + (54, 54, -54, -54)  # three-quarter-inch margins
+        more = True
+        while more:
+            device = writer.begin_page(page)
+            more, _ = story.place(body)
+            story.draw(device)
+            writer.end_page()
+        writer.close()
+        data = buffer.getvalue()
+        return data or None
+    except Exception:  # noqa: BLE001 - a failed export must not fail the request
+        return None
+
+
+def _print_pdf(html_text: str) -> bytes | None:
+    """Chrome headless if present, else LibreOffice; None if neither is."""
     browser = _chrome()
     with tempfile.TemporaryDirectory() as work:
         source = Path(work) / "report.html"

@@ -821,9 +821,8 @@ class Handler(BaseHTTPRequestHandler):
             if data is None:
                 return self._json(
                     503,
-                    {"error": "Could not produce that format. PDF needs Chrome or "
-                              "LibreOffice; Word is only available for reviews run "
-                              "after this feature was added."},
+                    {"error": "Could not produce the " + ("PDF" if fmt == "pdf" else "Word file")
+                              + " for this review. The HTML and Markdown downloads still work."},
                 )
             body = data
 
