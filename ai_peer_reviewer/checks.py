@@ -77,7 +77,10 @@ RUN = re.compile(r"\d{1,3}(?:\s*[,–—-]\s*\d{1,3})*")
 
 #: The start of the reference list, and a numbered entry within it.
 REFERENCE_HEAD = re.compile(r"(?m)^\s*References\s*$")
-REFERENCE_ENTRY = re.compile(r"(?m)^\s*(\d{1,3})\.\s*$|(?m)^\s*(\d{1,3})\.\s+(?=[A-Z])")
+# One (?m) at the front covers both alternatives. A second, mid-pattern, is a
+# warning on Python 3.10 and an error from 3.11: on the 3.12 in the container
+# it stopped this module importing at all.
+REFERENCE_ENTRY = re.compile(r"(?m)^\s*(\d{1,3})\.\s*$|^\s*(\d{1,3})\.\s+(?=[A-Z])")
 
 #: Captions inside the supplementary file, which are numbered in their own
 #: series and carry the word in front: "Supplementary Fig. 14 | Schematic…".

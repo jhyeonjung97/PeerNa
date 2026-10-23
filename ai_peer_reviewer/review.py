@@ -251,7 +251,13 @@ class Reviewer:
         """
         if manuscript.path.suffix.lower() != ".pdf":
             return
-        from . import checks
+        # Inside the guard like everything else here: a module that will not
+        # import is one more check that did not run, not a failed review.
+        try:
+            from . import checks
+        except Exception as exc:  # noqa: BLE001 - see the docstring
+            self.backend.note(f"Could not load the consistency checks ({exc}).")
+            return
 
         # Stored as JSON rather than as the joined text, so that "ran and found
         # nothing" survives a resume. Saved as text it would be an empty string,
@@ -292,7 +298,11 @@ class Reviewer:
 
     def _verify_pairs(self, manuscript: Manuscript, announce=None) -> list[str]:
         """Check every cross-reference and citation against what it points at."""
-        from . import checks
+        try:
+            from . import checks
+        except Exception as exc:  # noqa: BLE001 - see check_consistency
+            self.backend.note(f"Could not load the pairing checks ({exc}).")
+            return []
 
         out: list[str] = []
         jobs = (
