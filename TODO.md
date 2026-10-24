@@ -126,6 +126,15 @@ In order:
    Web search stays off (it finds the published paper). About $28. Report the
    field subset and the years separately: the papers are from 2020 to 2026 and
    the predictor may have read the older ones.
+3b. **Parse what the parser drops**, in the same re-parse. It keeps numbered
+   items only: the opening assessment of each report (median ~150 words) is
+   lost, and so are reports written as paragraphs, about 1,000 of 2,100
+   unnumbered reports in a 400-file sample running to 150 words or more.
+   Store a `kind` per comment (`summary` for the opening assessment, `point`
+   for each numbered item or, in a prose report, each paragraph) and the
+   review round, since second-round comments mostly say whether a point was
+   answered. Points feed precedents; summaries may inform the opening
+   paragraph and the recommendation.
 4. **Decide.** If part by part wins, merge `method-level-precedent` and point
    the production server at the corpus release (`AI_PEER_REVIEWER_CORPUS`,
    DEPLOY: The corpus index). `corpus-2026-10` is published: 11,797 papers and
