@@ -234,6 +234,13 @@ the menu still shows the models as available.
 - **Full-text corpus.** 4,500+ papers and growing, text only. The PDFs were
   not kept; `tools/download_corpus.py` is standalone and resumable if a machine
   with the disk turns up (~800 GB for everything, ~330 GB for reports alone).
+- **Embeddings run locally.** Every review sends sentences from each part of
+  the manuscript to OpenAI to search the comment index, a second company in
+  the path. An open model (bge-small, e5, nomic-embed) would close that, at
+  no saving worth the name (the whole index is about $2). It has to run on
+  the server too, since the query must use the model the index was built
+  with: check it fits 512 MB (ONNX, not PyTorch) and that retrieval holds up,
+  after §3 says retrieval is worth keeping.
 - **Working files outside the repository.** Test sets, labels and run outputs
   live under `~/.cache/ai-peer-reviewer/`. The scratch directory used before
   2026-10-22 was wiped, taking the ablation reports with it; nothing that a
