@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import random
 import re
 import sqlite3
@@ -54,6 +55,8 @@ PREDICTOR = "luna"
 #: Thinking is off: the answer is one list of ids, and on Sonnet 5 the thinking
 #: alone ran past 16,000 output tokens a paper — most of the cost of judging.
 JUDGE = "claude-sonnet-5-5"
+#: Judge through Claude Code (`claude -p`) instead of the API; set by --judge-cli.
+JUDGE_CLI = False
 
 #: The published text runs to 60–90k characters; the referees read the
 #: submitted one, so nothing past the main text is needed to guess at them.
@@ -170,8 +173,6 @@ def judge(result: dict, out: Path, lock: threading.Lock) -> dict:
     if path.is_file():
         return json.loads(path.read_text())
 
-    import anthropic
-
     real, used = [], 0
     for n, c in enumerate(real_comments(slug), 1):
         line = f"R{n}. {c[:800]}"
@@ -184,16 +185,8 @@ def judge(result: dict, out: Path, lock: threading.Lock) -> dict:
     random.Random(slug).shuffle(pool)
     predicted = "\n".join(f"P{i}. {p}" for i, (_, p) in enumerate(pool, 1))
 
-    with anthropic.Anthropic().messages.stream(
-        model=JUDGE,
-        max_tokens=4000,
-        thinking={"type": "between_tools"},
-        messages=[{"role": "user", "content": JUDGE_PROMPT.format(
-            real="\n".join(real), predicted=predicted)}],
-    ) as stream:
-        reply = stream.get_final_message()
-    # The reply may open with a thinking block; the answer is in the text.
-    raw = "".join(b.text for b in reply.content if b.type == "text")
+    prompt = JUDGE_PROMPT.format(real="\n".join(real), predicted=predicted)
+    raw, stop, tokens = (_judge_cli if JUDGE_CLI else _judge_api)(prompt)
     match = re.search(r"\{.*\}", raw, re.S)
     hits = set(json.loads(match.group(0))["hits"]) if match else set()
 
@@ -202,14 +195,55 @@ def judge(result: dict, out: Path, lock: threading.Lock) -> dict:
         if f"P{i}" in hits:
             scored[arm] += 1
     if not match:
-        raise ValueError(f"judge gave no JSON (stop: {reply.stop_reason})")
+        raise ValueError(f"judge gave no JSON (stop: {stop})")
     verdict = {"slug": slug, "hits": scored, "hit_ids": sorted(hits),
                "pool": [arm for arm, _ in pool],
-               "judge_tokens": [reply.usage.input_tokens, reply.usage.output_tokens]}
+               "judge_tokens": tokens}
     path.write_text(json.dumps(verdict, indent=1))
     with lock:
         print(f"  judged {slug}  {scored}", file=sys.stderr, flush=True)
     return verdict
+
+
+def _judge_api(prompt: str) -> tuple[str, str, list[int]]:
+    import anthropic
+
+    with anthropic.Anthropic().messages.stream(
+        model=JUDGE,
+        max_tokens=4000,
+        thinking={"type": "between_tools"},
+        messages=[{"role": "user", "content": prompt}],
+    ) as stream:
+        reply = stream.get_final_message()
+    # The reply may open with a thinking block; the answer is in the text.
+    raw = "".join(b.text for b in reply.content if b.type == "text")
+    return raw, reply.stop_reason, [reply.usage.input_tokens, reply.usage.output_tokens]
+
+
+def _judge_cli(prompt: str) -> tuple[str, str, list[int]]:
+    """The same judge through Claude Code, on its subscription, not the API.
+
+    The API key is kept out of the child's environment, or Claude Code would
+    bill it. It runs with no tools, no saved session and an empty working
+    directory, so nothing of a project or its memory reaches the judge.
+    """
+    import subprocess
+    import tempfile
+
+    env = {k: v for k, v in os.environ.items() if k not in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN")}
+    with tempfile.TemporaryDirectory() as empty:
+        done = subprocess.run(
+            ["claude", "-p", "--model", JUDGE, "--effort", "low", "--tools", "",
+             "--no-session-persistence", "--output-format", "json",
+             "--system-prompt", "You mark predictions against an answer key and reply with JSON only."],
+            input=prompt, capture_output=True, text=True, env=env, cwd=empty, timeout=900,
+        )
+    if done.returncode:
+        raise RuntimeError(f"claude -p failed: {done.stderr.strip()[:300] or done.stdout[:300]}")
+    reply = json.loads(done.stdout)
+    usage = reply.get("usage") or {}
+    return (reply.get("result") or "", reply.get("subtype", ""),
+            [usage.get("input_tokens", 0), usage.get("output_tokens", 0)])
 
 
 def manuscript_file(folder: Path, slug: str) -> Path | None:
@@ -267,7 +301,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--db", type=Path,
                         help="Read this copy of the corpus database instead. A harvest "
                              "writing to the live one locks out readers.")
+    parser.add_argument("--judge-cli", action="store_true",
+                        help="Judge through Claude Code on its subscription, not the API.")
     args = parser.parse_args(argv)
+    global JUDGE_CLI
+    JUDGE_CLI = args.judge_cli
     if args.db:
         corpus_index.DB_PATH = args.db
 
