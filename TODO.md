@@ -76,6 +76,10 @@ ten published papers, keep them under `~/PeerNa-data/`, and run both arms
 again, with the checks and without, since the old 31 / 79 was measured on other
 defects. About $2.50 on Luna, 90 minutes.
 
+Add a second arm to the same run: the consistency checks at medium effort
+rather than high (two calls a review, about $0.06 on Sonnet). Keep high unless
+medium catches as many of the cross-reference and citation defects.
+
 ## 2. A human reads them blind
 
 **The most important open item, and the cheapest.** Every objective result rests

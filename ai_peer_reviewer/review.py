@@ -92,6 +92,11 @@ CONDENSE_ATTEMPTS = 2
 #: reasoning problem, and the extra thought went into keeping words.
 CONDENSE_EFFORT = "medium"
 
+#: Effort for settling the recommendation. One question about a finished list
+#: of comments, with a code check behind it that demotes an unsupported major;
+#: high spent thinking tokens on it for no measured gain (2026-10-24).
+VERDICT_EFFORT = "medium"
+
 #: What a review does after the lenses, in order. Named here rather than counted
 #: at each call site: the count was written out in two places and they had
 #: drifted apart, so the progress bar in the browser stopped short of the end of
@@ -485,6 +490,7 @@ class Reviewer:
                 [],
                 f"{VERDICT_INSTRUCTION}\n\n{report.general_comments.strip()}\n\n{listed}",
                 Verdict,
+                effort=VERDICT_EFFORT,
             )
         except Exception as exc:  # noqa: BLE001 - see the docstring
             self.backend.note(f"Could not settle the recommendation ({exc}).")
