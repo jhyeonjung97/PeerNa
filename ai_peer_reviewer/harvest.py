@@ -181,8 +181,10 @@ def run(query: str, limit: int, on_progress=None) -> Progress:
                             (result["slug"], reviewer, position, text),
                         )
                 progress.stored += 1
-                if progress.stored % 25 == 0:
-                    connection.commit()
+            # By papers looked at, not stored: a stretch of turned-down papers
+            # would otherwise go uncommitted, and be read again after a restart.
+            if progress.seen % 25 == 0:
+                connection.commit()
             if on_progress:
                 on_progress(progress)
 
