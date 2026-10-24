@@ -111,9 +111,14 @@ Two questions on the same run: does precedent retrieval help, and is Sonnet
 **The clean test set.** Manuscripts published from 2026-07-01, after both
 predictors' training data (Sonnet 5.5 June 2026, Luna February 2026), with a
 Research Square v1 posted between 30 days before receipt and acceptance, CC BY.
-Crossref links found 56 among the 3,240 held-out papers; a title and first-
-author search of Research Square DOIs adds more
-(`~/PeerNa-data/rsquare/find_by_title.py`, result in `testset-clean.slugs`).
+Crossref links found 56 among the 3,240 held-out papers and a title and first-
+author search of Research Square DOIs 62 more (`~/PeerNa-data/rsquare/
+find_by_title.py`). Of the 118, 94 are confirmed by the DOI Research Square
+stamps on the preprint once the paper is out; 15 more by a Crossref link, a
+title match of 0.9 or better, or the abstract; 9 could not be confirmed and
+are left out. **109 manuscripts**, in `~/PeerNa-data/rsquare-clean/`
+(`testset.json` records how each pair was confirmed, `pdf-clean/` the
+redacted PDFs). Report on all 109 and on the 94 stamped ones.
 Kept for the final judgement only, never for tuning; the older 560-paper set
 (`testset.slugs`, most of it inside both models' training data) is the one
 to tune on.
