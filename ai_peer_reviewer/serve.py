@@ -675,6 +675,9 @@ class Handler(BaseHTTPRequestHandler):
                                 models.REGISTRY[name].provider
                             ),
                             "allowed": quota.allowed(viewer, models.REGISTRY[name]),
+                            # There is no payment yet, so on a server a paid
+                            # model is shown and not offered, to everyone.
+                            "paid": HOSTED and quota.paid(models.REGISTRY[name]),
                             "hint": config.key_hint(
                                 models.REGISTRY[name].provider
                             ),

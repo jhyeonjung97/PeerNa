@@ -52,6 +52,14 @@ def exempt(email: str | None) -> bool:
 PAID_ONLY = {"fable", "opus"}
 
 
+def paid(spec) -> bool:
+    """Whether this model is one of the paid-only lines."""
+    from .models import REGISTRY
+
+    lines = {REGISTRY[name].label.split()[0] for name in PAID_ONLY}
+    return spec.label.split()[0] in lines
+
+
 def allowed(email: str | None, spec) -> bool:
     """Whether this account may run a review on this model."""
     from .models import REGISTRY
