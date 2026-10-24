@@ -213,6 +213,27 @@ LUNA = ModelSpec(
 #: Order here is the order shown in `--help`.
 ALIASES = ("luna", "fable", "opus", "sonnet", "haiku")
 
+#: What the site offers, a narrower list than the command line's. Haiku and Luna
+#: were taken off the menu on 2026-10-24 with Sonnet as the default; they stay
+#: reachable from the command line and the evaluation tools.
+SITE_MODELS = ("sonnet", "opus", "fable")
+
+
+def site_model(name: str | None) -> str:
+    """The model a site review runs on, refusing one the site does not offer.
+
+    No name, or a configured default the site no longer offers, falls back to
+    DEFAULT_MODEL; a request that names one is refused, since it was chosen.
+    """
+    if not name:
+        return DEFAULT_MODEL
+    chosen = preferred(name)
+    lines = {REGISTRY[n].label.split()[0] for n in SITE_MODELS}
+    spec = REGISTRY.get(chosen)
+    if spec is None or spec.label.split()[0] not in lines:
+        raise ValueError(f"{spec.label if spec else name} is not offered here.")
+    return chosen
+
 #: The short names follow the newest model of each line. The older ones stay
 #: reachable by their full ids, so a run can be repeated on what it used.
 REGISTRY: dict[str, ModelSpec] = {
@@ -242,8 +263,8 @@ QUALITY_NOTE = {
     "fable": "Most capable. Worth it for a paper you cannot afford to misjudge. Needs 30-day data retention.",
     "opus": "Best value for real reviews. Catches subtle methodological problems.",
     "sonnet": "Solid. Good for iterating on your own drafts.",
-    "haiku": "Cheapest per token, fast. Untested here — no review quality measured yet.",
-    "luna": "Cheap (OpenAI) and the model every measurement here was taken on. Expect shallow findings. Needs OPENAI_API_KEY.",
+    "haiku": "Cheapest per token, fast. Command line only; review quality unmeasured.",
+    "luna": "Cheap (OpenAI); the default until 2026-10-24. Command line only. Needs OPENAI_API_KEY.",
 }
 
 #: Environment variable each provider's SDK reads.

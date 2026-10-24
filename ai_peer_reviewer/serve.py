@@ -447,6 +447,19 @@ def _run_review(job_id: str, path: Path, spec, web_search: bool,
         _forget(supplementary_id)
 
 
+
+def _default_model() -> str:
+    """The configured default, or DEFAULT_MODEL if the site no longer offers it."""
+    try:
+        return models.site_model(config.configured_model())
+    except ValueError:
+        return models.DEFAULT_MODEL
+
+
+def _requested_model(payload: dict) -> str:
+    asked = payload.get("model")
+    return models.site_model(asked) if asked else _default_model()
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "AIPeerReviewer"
 
@@ -612,7 +625,7 @@ class Handler(BaseHTTPRequestHandler):
             # process that can serve a file but has lost its credentials. This
             # checks the two things a review actually needs.
             reviews = [
-                name for name in models.ALIASES
+                name for name in models.SITE_MODELS
                 if config.has_credentials(models.REGISTRY[name].provider)
             ]
             healthy = bool(reviews) and WEB_ROOT.is_dir()
@@ -666,14 +679,12 @@ class Handler(BaseHTTPRequestHandler):
                                 models.REGISTRY[name].provider
                             ),
                         }
-                        for name in models.ALIASES
+                        for name in models.SITE_MODELS
                     ],
                     # Through preferred(), like every other use of a model
                     # name, so a configuration naming a retired model selects
                     # the one that will actually run.
-                    "default": models.preferred(
-                        config.configured_model() or models.DEFAULT_MODEL
-                    ),
+                    "default": _default_model(),
                 },
             )
 
@@ -764,8 +775,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def _estimate(self, payload: dict) -> None:
         try:
-            asked = payload.get("model") or config.configured_model() or models.DEFAULT_MODEL
-            spec = models.resolve(models.preferred(asked))
+            spec = models.resolve(_requested_model(payload))
             if not config.has_credentials(spec.provider):
                 env = models.CREDENTIAL_ENV[spec.provider]
                 return self._json(
@@ -806,7 +816,7 @@ class Handler(BaseHTTPRequestHandler):
                     ),
                 },
             )
-        except SystemExit as exc:
+        except (SystemExit, ValueError) as exc:
             self._json(400, {"error": str(exc)})
         except Exception as exc:
             self._json(400, {"error": f"{type(exc).__name__}: {exc}"})
@@ -826,8 +836,10 @@ class Handler(BaseHTTPRequestHandler):
                     "error": f"You have used your {quota.FREE_REVIEWS} free reviews.",
                     "exhausted": True,
                 })
-            asked = payload.get("model") or config.configured_model() or models.DEFAULT_MODEL
-            spec = models.resolve(models.preferred(asked))
+            try:
+                spec = models.resolve(_requested_model(payload))
+            except ValueError as exc:
+                return self._json(400, {"error": str(exc)})
             if not quota.allowed(viewer, spec):
                 # Checked here as well as greyed out in the menu: the menu is a
                 # convenience, and a request can name any model it likes.
@@ -953,7 +965,7 @@ def main(argv: list[str] | None = None) -> int:
 
     config.load()
 
-    ready = [n for n in models.ALIASES if config.has_credentials(models.REGISTRY[n].provider)]
+    ready = [n for n in models.SITE_MODELS if config.has_credentials(models.REGISTRY[n].provider)]
     if not ready:
         # Named both ways round on purpose. Run by hand the answer is the .env;
         # run in a container there is no .env and the answer is the platform's

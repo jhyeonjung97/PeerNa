@@ -73,7 +73,13 @@ first place to check it.
 
 What it costs: about $0.40 a review against Luna's $0.10, so three free reviews
 are about $1.20 an account. The spend ceiling in TODO §6 matters more now.
-OpenAI is still needed, for Luna and for the corpus search embeddings.
+OpenAI is still needed, for the corpus search embeddings.
+
+The same day the site menu narrowed to Sonnet, Opus and Fable
+(`models.SITE_MODELS`), with Opus and Fable for paid reviews only. Haiku and
+Luna stay on the command line and in the evaluation tools; the server refuses a
+request that names them, and a configured default it no longer offers falls
+back to Sonnet. The server now needs `ANTHROPIC_API_KEY` to start.
 
 ---
 
