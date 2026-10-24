@@ -132,6 +132,12 @@ button.ghost { background: transparent; color: var(--accent); }
 
 #historyList li.running { border-color: var(--accent); }
 #historyList .prog { display: flex; align-items: center; gap: .45rem; color: var(--accent); font-size: .84rem; white-space: nowrap; }
+/* A running review is always two lines: the file and the clock, then the step.
+   Several passes run at once and their names together outgrow one line, which
+   wrapped at a different place on every update. */
+#historyList li.running { flex-wrap: wrap; row-gap: .25rem; }
+#historyList li.running .prog { order: 3; flex: 1 0 100%; min-width: 0; }
+#historyList li.running .stage { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 #historyList .prog .spinner { width: 13px; height: 13px; border-width: 2px; }
 .spinner {
   width: 18px; height: 18px; flex: none; border-radius: 50%;
@@ -786,8 +792,8 @@ function loadHistory() {
         const since = j.started_at ? j.started_at * 1000 : Date.now();
         return `<li class="running" data-id="${j.job_id}">
           <span class="name">${j.filename}</span>
-          <span class="prog"><span class="spinner"></span>
-            [${j.step ?? 0}/${j.total ?? 5}] ${j.stage || "starting"}</span>
+          <span class="prog" title="${j.stage || ""}"><span class="spinner"></span>
+            <span class="stage">[${j.step ?? 0}/${j.total ?? 5}] ${j.stage || "starting"}</span></span>
           <span class="clock" data-since="${since}"></span>
         </li>`;
       }
