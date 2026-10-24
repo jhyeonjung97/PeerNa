@@ -252,8 +252,9 @@ the menu still shows the models as available.
   - a first-round point that comes back in the second round is one the
     authors could not easily answer; those kinds of request may deserve a
     firmer place in the report;
-  - the distribution of points per referee gives a measured target for how
-    many comments a PeerNa report should carry.
+  - not a count target: a PeerNa report stands for all its referees
+    together, so it may carry more points than one referee writes. Match
+    the length of each comment to the corpus, never the number.
 - **Working files outside the repository.** Test sets, labels and run outputs
   live under `~/.cache/ai-peer-reviewer/`. The scratch directory used before
   2026-10-22 was wiped, taking the ablation reports with it; nothing that a

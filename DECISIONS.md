@@ -807,7 +807,9 @@ eighteen comments, and with four readings of notes it met that by choosing.
 
 The rule now, as Hyeonjung put it: shortening is done on the wording, never by
 leaving points out. There is no target number; duplication and lack of support
-are the only reasons a point leaves. One re-run gave 19 comments against 18,
+are the only reasons a point leaves. A report stands in for referees 1 to 3
+and any beyond, so it may run longer than one referee's list; the corpus sets
+the length of each comment, not how many there are. One re-run gave 19 comments against 18,
 fewer words overall, and the convergence request at item 5. One run, so the
 attribution is provisional.
 
