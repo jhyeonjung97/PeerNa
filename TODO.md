@@ -113,9 +113,10 @@ In order:
 
 1. **Index the last five years only.** Decided 2026-10-24: papers registered
    from 2022 on (`embed_index --since 2022`, the year in the slug), 37,990
-   papers and 1,137,012 points. The harvest is stopped for good; it had
-   reached early March 2021, so 2022 is complete, and the 2016–2021 papers
-   already fetched stay in the database outside the index. The held-out set
+   papers and 1,137,012 points. The harvest had reached early March 2021,
+   so 2022 is complete. It resumes back to 2016 once the snapshot is taken,
+   into the live database only, in case a longer window is wanted later;
+   the 2016–2021 papers stay outside any index built `--since 2022`. The held-out set
    (published from 2026-06-01) is 3,240 papers. The test reads a snapshot,
    `~/PeerNa-data/corpus-2026-10-24.sqlite`, which doubles as the backup
    that `~/.cache` lacks.
