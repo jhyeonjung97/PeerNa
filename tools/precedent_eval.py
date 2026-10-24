@@ -57,6 +57,8 @@ PREDICTOR = "luna"
 JUDGE = "claude-sonnet-5-5"
 #: Judge through Claude Code (`claude -p`) instead of the API; set by --judge-cli.
 JUDGE_CLI = False
+#: Predict through Claude Code too; set by --predictor-cli MODEL.
+PREDICT_CLI = False
 
 #: The published text runs to 60–90k characters; the referees read the
 #: submitted one, so nothing past the main text is needed to guess at them.
@@ -142,7 +144,7 @@ def predict(slug: str, text: str, out: Path, lock: threading.Lock,
         return json.loads(path.read_text())
 
     spec = models.resolve(PREDICTOR)
-    backend = backends.build(spec)
+    backend = ClaudeCodeBackend(spec) if PREDICT_CLI else backends.build(spec)
     reviewer = Reviewer(backend, "referee", use_web_search=False)
     manuscript = Manuscript(Path(f"{slug}.txt"), [TextPart(text[:MANUSCRIPT_CHARS])])
 
@@ -160,7 +162,8 @@ def predict(slug: str, text: str, out: Path, lock: threading.Lock,
             result[f"{arm}_sources"] = material[arm][2]
         answer = backend.run_structured(reviewer.system, manuscript.parts, prompt, Predictions)
         result[arm] = answer.predictions[:PREDICTIONS]
-    result["cost"] = backend.take_usage().cost(spec)
+    result["cost"] = 0.0 if PREDICT_CLI else backend.take_usage().cost(spec)
+    result["predictor"] = spec.id
     path.write_text(json.dumps(result, indent=1))
     with lock:
         print(f"  predicted {slug}  ${result['cost']:.3f}", file=sys.stderr, flush=True)
@@ -220,30 +223,61 @@ def _judge_api(prompt: str) -> tuple[str, str, list[int]]:
     return raw, reply.stop_reason, [reply.usage.input_tokens, reply.usage.output_tokens]
 
 
-def _judge_cli(prompt: str) -> tuple[str, str, list[int]]:
-    """The same judge through Claude Code, on its subscription, not the API.
+def claude_cli(system: str, prompt: str, model: str, schema: dict | None = None) -> dict:
+    """One call through Claude Code (`claude -p`), on its subscription, not the API.
 
     The API key is kept out of the child's environment, or Claude Code would
-    bill it. It runs with no tools, no saved session and an empty working
-    directory, so nothing of a project or its memory reaches the judge.
+    bill it. No tools, MCP servers, settings, skills or saved session, and an
+    empty working directory: without these the call carries some 80,000 tokens
+    of the operator's own setup, down to the language it answers in.
     """
     import subprocess
     import tempfile
 
     env = {k: v for k, v in os.environ.items() if k not in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN")}
+    command = ["claude", "-p", "--model", model, "--effort", "low", "--tools", "",
+               "--strict-mcp-config", "--setting-sources", "", "--disable-slash-commands",
+               "--no-session-persistence", "--output-format", "json", "--system-prompt", system]
+    if schema:
+        command += ["--json-schema", json.dumps(schema)]
     with tempfile.TemporaryDirectory() as empty:
-        done = subprocess.run(
-            ["claude", "-p", "--model", JUDGE, "--effort", "low", "--tools", "",
-             "--no-session-persistence", "--output-format", "json",
-             "--system-prompt", "You mark predictions against an answer key and reply with JSON only."],
-            input=prompt, capture_output=True, text=True, env=env, cwd=empty, timeout=900,
-        )
+        done = subprocess.run(command, input=prompt, capture_output=True, text=True,
+                              env=env, cwd=empty, timeout=1800)
     if done.returncode:
         raise RuntimeError(f"claude -p failed: {done.stderr.strip()[:300] or done.stdout[:300]}")
-    reply = json.loads(done.stdout)
+    return json.loads(done.stdout)
+
+
+def _judge_cli(prompt: str) -> tuple[str, str, list[int]]:
+    reply = claude_cli("You mark predictions against an answer key and reply with JSON only.",
+                       prompt, JUDGE)
     usage = reply.get("usage") or {}
     return (reply.get("result") or "", reply.get("subtype", ""),
-            [usage.get("input_tokens", 0), usage.get("output_tokens", 0)])
+            [usage.get("input_tokens", 0) + usage.get("cache_creation_input_tokens", 0)
+             + usage.get("cache_read_input_tokens", 0), usage.get("output_tokens", 0)])
+
+
+class ClaudeCodeBackend(backends.Backend):
+    """The predictor through Claude Code, text only, for --cli runs."""
+
+    def run_text(self, system, parts, instruction, web_search, effort="high", label="working"):
+        return claude_cli(system, self._prompt(parts, instruction), self.spec.id).get("result") or ""
+
+    def run_structured(self, system, parts, instruction, model_cls,
+                       web_search: bool = False, effort: str = "high"):
+        reply = claude_cli(system, self._prompt(parts, instruction), self.spec.id,
+                           model_cls.model_json_schema())
+        if reply.get("structured_output") is None:
+            raise RuntimeError(f"claude -p gave no structured output ({reply.get('subtype')})")
+        return model_cls.model_validate(reply["structured_output"])
+
+    def count_input_tokens(self, system, parts) -> int:
+        return 0
+
+    @staticmethod
+    def _prompt(parts, instruction: str) -> str:
+        text = "\n\n".join(p.text for p in parts if isinstance(p, TextPart))
+        return f"MANUSCRIPT\n\n{text}\n\n---\n\n{instruction}"
 
 
 def manuscript_file(folder: Path, slug: str) -> Path | None:
@@ -303,9 +337,13 @@ def main(argv: list[str] | None = None) -> int:
                              "writing to the live one locks out readers.")
     parser.add_argument("--judge-cli", action="store_true",
                         help="Judge through Claude Code on its subscription, not the API.")
+    parser.add_argument("--predictor-cli", metavar="MODEL",
+                        help="Predict with this model through Claude Code, e.g. sonnet.")
     args = parser.parse_args(argv)
-    global JUDGE_CLI
+    global JUDGE_CLI, PREDICT_CLI, PREDICTOR
     JUDGE_CLI = args.judge_cli
+    if args.predictor_cli:
+        PREDICT_CLI, PREDICTOR = True, args.predictor_cli
     if args.db:
         corpus_index.DB_PATH = args.db
 

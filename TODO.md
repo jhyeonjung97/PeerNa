@@ -128,11 +128,15 @@ In order:
 
        python -m tools.precedent_eval ~/PeerNa-data/rsquare/pdf-clean OUT \
            --slugs ~/PeerNa-data/rsquare/testset.slugs --submitted \
-           --judge-cli --db ~/PeerNa-data/corpus-2026-10-24.sqlite
+           --predictor-cli claude-sonnet-5-5 --judge-cli \
+           --db ~/PeerNa-data/corpus-2026-10-24.sqlite
 
    Started 2026-10-24 into `~/PeerNa-data/runs/precedent-rsquare-2026-10-24/`.
-   The predictor is Luna on the API; the judge, Sonnet 5.5, runs through
-   Claude Code (`--judge-cli`) on the subscription. Web search stays off (it finds the published paper). About $28. Report the
+   Predictor and judge both run through Claude Code on the subscription
+   (`--predictor-cli claude-sonnet-5-5 --judge-cli`); only the search
+   embeddings use the OpenAI API. One family on both sides is acceptable
+   here because every arm has the same predictor, so a judge's taste for
+   its own family's writing lifts all three equally. About 80 s a paper. Web search stays off (it finds the published paper). About $28. Report the
    field subset and the years separately: the papers are from 2020 to 2026 and
    the predictor may have read the older ones.
 3b. **Parser v2 — done** (e5458f6). Each comment has a `kind` (`summary` for
