@@ -103,66 +103,52 @@ not share a model family with the writer.
 Worth also re-running the model preference properly: its own call, no defect
 list, reports only. That gives a machine baseline to compare the human against.
 
-## 3. Precedent retrieval: the test on submitted manuscripts
+## 3. Precedents and the model: one test on clean manuscripts
 
-Built part by part (DECISIONS: Precedents part by part) and still not shown to
-help. The pilot on 126 published papers found nothing, but published text gives
-the answers away and only 10 of them were in the field.
+Two questions on the same run: does precedent retrieval help, and is Sonnet
+(the default since 2026-10-24) better than Luna at predicting referees.
 
-**The real test is ready.** 560 Research Square "In Review" manuscripts, the
-text the referees read, each with its own referee reports as the answer key,
-about 310 in the field (DECISIONS: A test set of manuscripts as submitted).
-Files are in `~/PeerNa-data/rsquare/`: `pdf-clean/` holds the
-manuscripts with the publication stamp redacted, `testset.slugs` the list.
+**The clean test set.** Manuscripts published from 2026-07-01, after both
+predictors' training data (Sonnet 5.5 June 2026, Luna February 2026), with a
+Research Square v1 posted between 30 days before receipt and acceptance, CC BY.
+Crossref links found 56 among the 3,240 held-out papers; a title and first-
+author search of Research Square DOIs adds more
+(`~/PeerNa-data/rsquare/find_by_title.py`, result in `testset-clean.slugs`).
+Kept for the final judgement only, never for tuning; the older 560-paper set
+(`testset.slugs`, most of it inside both models' training data) is the one
+to tune on.
 
-In order:
+**Before the run, so it never has to be repeated:**
 
-1. **Index the last five years only.** Decided 2026-10-24: papers registered
-   from 2022 on (`embed_index --since 2022`, the year in the slug), 37,990
-   papers and 1,137,012 points. The harvest had reached early March 2021,
-   so 2022 is complete. It resumes back to 2016 once the snapshot is taken,
-   into the live database only, in case a longer window is wanted later;
-   the 2016–2021 papers stay outside any index built `--since 2022`. The held-out set
-   (published from 2026-06-01) is 3,240 papers. The test reads a snapshot,
-   `~/PeerNa-data/corpus-2026-10-24.sqlite`, which doubles as the backup
-   that `~/.cache` lacks.
-2. **Re-parsed with parser v2:** 1,274,166 points (936,822 first-round) and
-   232,971 summaries from 43,351 files; comment vectors for points only.
-   Still to do: retry the failed papers, bundle with `tools.corpus_bundle`
-   (it needs the same `--since`) and publish a new tag.
-3. **Run it.**
+1. *Precedents from the past only.* Each manuscript sees papers published
+   before its received date (`~/PeerNa-data/published-dates.json`, 77,548
+   dates from Europe PMC). Without this a 2026 manuscript is shown the
+   reviews of later, related papers.
+2. *Same effort for both predictors.* Claude Code ran at low, the API at high.
+3. *Two judges, and both models' predictions in one pool.* A Sonnet judge
+   may favour Sonnet's wording; judge with Sonnet and with Luna, each seeing
+   every prediction for a paper shuffled and unlabelled, and trust what both
+   agree on. A person marks a sample of 20–30 to see which judge is closer.
+4. *Memorisation probe.* Ask each model what the referees of a few test papers
+   asked, given the title alone. Anything specific marks the paper as seen.
+5. *Keep every input and output.* Prompt, manuscript hash, material, sources,
+   model, effort, index tag and commit beside each prediction, so a change to
+   judging or counting reruns the judge and nothing else.
+6. *Answer-key spot check.* Read the first-round points of ten test papers for
+   author replies, reference fragments and round errors.
+7. *A five-paper dry run* that checks all of the above, then the full run.
+   Report each comparison with its confidence interval, not only a p-value:
+   with about 100 papers only a difference near 0.5 hits a paper shows.
 
-       python -m tools.precedent_eval ~/PeerNa-data/rsquare/pdf-clean OUT \
-           --slugs ~/PeerNa-data/rsquare/testset.slugs --submitted \
-           --predictor-cli claude-sonnet-5-5 --judge-cli \
-           --db ~/PeerNa-data/corpus-2026-10-24.sqlite
+**Index.** `corpus-2026-10-24`: papers registered from 2022, 37,990, with
+1,098,322 first-and-later-round points, comment vectors as int8 (top-8 search
+results 97% the same as float16). Published and live on both servers. The
+snapshot `~/PeerNa-data/corpus-2026-10-24.sqlite` is what the test reads and
+the backup `~/.cache` lacks. The harvest carries on back to 2016 into the live
+database only.
 
-   Started 2026-10-24 into `~/PeerNa-data/runs/precedent-rsquare-2026-10-24/`.
-   Predictor and judge both run through Claude Code on the subscription
-   (`--predictor-cli claude-sonnet-5-5 --judge-cli`); only the search
-   embeddings use the OpenAI API. One family on both sides is acceptable
-   here because every arm has the same predictor, so a judge's taste for
-   its own family's writing lifts all three equally. About 80 s a paper. Web search stays off (it finds the published paper). About $28. Report the
-   field subset and the years separately: the papers are from 2020 to 2026 and
-   the predictor may have read the older ones.
-3b. **Parser v2 — done** (e5458f6). Each comment has a `kind` (`summary` for
-   a report's opening assessment, `point` for each numbered item or prose
-   paragraph) and a review `round`. Rebuttal quotes and author replies are
-   dropped per unit. On 31,834 files: 954,530 points (693,071 first-round)
-   and 176,982 summaries, about 29% more points than before. Precedents and
-   the answer key use points only, the answer key first round only;
-   summaries are stored and untried.
-4. **Decide.** If part by part wins, merge `method-level-precedent` and point
-   the production server at the corpus release (`AI_PEER_REVIEWER_CORPUS`,
-   DEPLOY: The corpus index). `corpus-2026-10` is published: 11,797 papers and
-   330,146 comment vectors, 450 MB packed, fetched in about 25 s and searched
-   in 256 MB of memory. The whole-journal harvest started 2026-10-23
-   (`harvest-2026-10-all/`) will roughly quadruple it; re-index and publish a
-   new tag when it finishes. If nothing wins, the retrieval needs
-   rethinking before anything else is built on it.
-
-Both arms of the old 20-paper test hit about a third, and the pilot about a
-fifth with a stricter judge: predicting a referee is hard by any route.
+Predictor and judge run through Claude Code where they are Claude
+(`--predictor-cli`, `--judge-cli`); Luna runs on the API.
 
 ## 4. Give it to a few postdocs
 
