@@ -260,7 +260,10 @@ class Reviewer:
             as_text_only(manuscript.parts),
             f"{instruction}\n{material}",
             False,
-            "medium",
+            # Medium since the pipeline was written, never measured; raised
+            # 2026-10-24 to match the breakdown that feeds it. It runs beside
+            # the lenses, so it adds cost (about $0.03 on Sonnet) more than time.
+            "high",
             "Field expectations",
         )
 
