@@ -189,7 +189,15 @@ def label(name: str) -> str:
 
 # ------------------------------------------------------------- data
 
+#: A directory of answer keys read by a model (tools/answer_key.py), used in
+#: place of the parser's comments when set by --answers.
+ANSWERS: "Path | None" = None
+
+
 def real_comments(slug: str) -> list[str]:
+    if ANSWERS is not None:
+        key = json.loads((ANSWERS / f"{slug}.json").read_text())
+        return [p for r in sorted(key["reports"], key=lambda r: r["reviewer"]) for p in r["points"]]
     connection = sqlite3.connect(f"file:{corpus_index.DB_PATH}?mode=ro", uri=True, timeout=30)
     try:
         # The answer key gets the same filter as the precedents: a reply the
@@ -417,11 +425,15 @@ def main(argv: list[str] | None = None) -> int:
                         help="Comma-separated; cli:MODEL runs through Claude Code.")
     parser.add_argument("--judges", default="cli:claude-sonnet-5-5",
                         help="Comma-separated; every judge marks every predictor's predictions.")
+    parser.add_argument("--answers", type=Path,
+                        help="Answer keys from tools/answer_key.py instead of the parser's.")
     parser.add_argument("--subset", action="append", default=[], metavar="NAME=FILE",
                         help="Also report on the slugs in FILE, e.g. stamped=stamped.slugs.")
     args = parser.parse_args(argv)
     if args.db:
         corpus_index.DB_PATH = args.db
+    global ANSWERS
+    ANSWERS = args.answers
     if args.dates and not args.testset:
         parser.error("--dates needs --testset for the received dates")
 
