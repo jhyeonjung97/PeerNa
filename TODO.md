@@ -111,24 +111,27 @@ manuscripts with the publication stamp redacted, `testset.slugs` the list.
 
 In order:
 
-1. **Test on what is harvested so far** rather than wait for the rest. The
-   index of 2026-10-24 covers 43,555 papers, back to early March 2021; the
-   held-out set (published from 2026-06-01) is complete at 3,240 papers. The
-   harvest carries on from 2021-03-10 back to 2016 alongside, into the live
-   database; the test reads a snapshot, `~/PeerNa-data/corpus-2026-10-24.sqlite`,
-   which doubles as the backup that `~/.cache` lacks.
+1. **Index the last five years only.** Decided 2026-10-24: papers registered
+   from 2022 on (`embed_index --since 2022`, the year in the slug), 37,990
+   papers and 1,137,012 points. The harvest is stopped for good; it had
+   reached early March 2021, so 2022 is complete, and the 2016–2021 papers
+   already fetched stay in the database outside the index. The held-out set
+   (published from 2026-06-01) is 3,240 papers. The test reads a snapshot,
+   `~/PeerNa-data/corpus-2026-10-24.sqlite`, which doubles as the backup
+   that `~/.cache` lacks.
 2. **Re-parsed with parser v2:** 1,274,166 points (936,822 first-round) and
    232,971 summaries from 43,351 files; comment vectors for points only.
-   Still to do when the harvest ends: re-index, retry the failed papers,
-   bundle with `tools.corpus_bundle` and, if the bundle passes 2 GB, keep
-   only the last three or five years (the year is in the slug).
+   Still to do: retry the failed papers, bundle with `tools.corpus_bundle`
+   (it needs the same `--since`) and publish a new tag.
 3. **Run it.**
 
        python -m tools.precedent_eval ~/PeerNa-data/rsquare/pdf-clean OUT \
            --slugs ~/PeerNa-data/rsquare/testset.slugs --submitted \
-           --db ~/PeerNa-data/corpus-2026-10-24.sqlite
+           --judge-cli --db ~/PeerNa-data/corpus-2026-10-24.sqlite
 
-   Started 2026-10-24 into `~/PeerNa-data/runs/precedent-rsquare-2026-10-24/`. Web search stays off (it finds the published paper). About $28. Report the
+   Started 2026-10-24 into `~/PeerNa-data/runs/precedent-rsquare-2026-10-24/`.
+   The predictor is Luna on the API; the judge, Sonnet 5.5, runs through
+   Claude Code (`--judge-cli`) on the subscription. Web search stays off (it finds the published paper). About $28. Report the
    field subset and the years separately: the papers are from 2020 to 2026 and
    the predictor may have read the older ones.
 3b. **Parser v2 — done** (e5458f6). Each comment has a `kind` (`summary` for
