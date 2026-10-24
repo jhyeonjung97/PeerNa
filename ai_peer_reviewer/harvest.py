@@ -14,6 +14,7 @@ rate-limited out of them would cost far more than the hours saved.
 from __future__ import annotations
 
 import json
+import os
 import re
 import sqlite3
 import sys
@@ -36,10 +37,11 @@ from .fetch import EPMC, SPRINGER_ESM, WANTED, _get
 
 #: Simultaneous downloads. Measured at 4.2s of network per paper, so three
 #: workers turn a 3.6-day sequential harvest into about a day.
-WORKERS = 3
+WORKERS = int(os.environ.get("PEERNA_HARVEST_WORKERS") or 3)
 
-#: Seconds each worker waits between papers.
-COURTESY = 2.0
+#: Seconds each worker waits between papers. Both can be raised for a long
+#: harvest; six workers at half a second ran without refusals.
+COURTESY = float(os.environ.get("PEERNA_HARVEST_COURTESY") or 2.0)
 
 PAGE = 100
 
@@ -93,12 +95,17 @@ PDF_DIR = INDEX_DIR / "review_pdfs"
 KEEP_PDFS = False
 
 
+def _slug(paper: dict) -> str:
+    doi = paper.get("doi") or ""
+    return doi.rsplit("/", 1)[-1] if doi else paper["pmcid"]
+
+
 def harvest_one(paper: dict) -> dict | None:
     """Title, abstract and reviewer comments for one paper. None if unusable."""
     import pymupdf
 
     doi = paper.get("doi") or ""
-    slug = doi.rsplit("/", 1)[-1] if doi else paper["pmcid"]
+    slug = _slug(paper)
     xml = _get(f"{EPMC}/{paper['pmcid']}/fullTextXML", timeout=90).decode("utf-8", "replace")
 
     title, abstract = abstract_from_xml(xml)
@@ -141,16 +148,22 @@ def run(query: str, limit: int, on_progress=None) -> Progress:
     connection.execute(
         "CREATE TABLE IF NOT EXISTS review_text (slug TEXT PRIMARY KEY, text TEXT)"
     )
+    # Papers looked at and found unusable: no review file, or one that parses to
+    # nothing. Telling that takes the full text, so a harvest resumed without
+    # this list spends an hour re-reading the thousands it already turned down.
+    connection.execute("CREATE TABLE IF NOT EXISTS unusable (slug TEXT PRIMARY KEY)")
 
     have = {r[0] for r in connection.execute("SELECT slug FROM papers")}
+    have |= {r[0] for r in connection.execute("SELECT slug FROM unusable")}
     write_lock = threading.Lock()
     progress = Progress()
 
-    def store(result: dict | None) -> None:
+    def store(result: dict | None, slug: str) -> None:
         with write_lock:
             progress.seen += 1
             if not result:
                 progress.skipped += 1
+                connection.execute("INSERT OR IGNORE INTO unusable VALUES (?)", (slug,))
             else:
                 connection.execute(
                     "INSERT OR REPLACE INTO papers VALUES (?,?,?)",
@@ -175,7 +188,7 @@ def run(query: str, limit: int, on_progress=None) -> Progress:
 
     def work(paper: dict) -> None:
         try:
-            store(harvest_one(paper))
+            store(harvest_one(paper), _slug(paper))
         except Exception:
             with write_lock:
                 progress.seen += 1
@@ -189,7 +202,7 @@ def run(query: str, limit: int, on_progress=None) -> Progress:
             if not batch or cursor_next == cursor:
                 break
             cursor = cursor_next
-            fresh = [p for p in batch if (p.get("doi") or "").rsplit("/", 1)[-1] not in have]
+            fresh = [p for p in batch if _slug(p) not in have]
             for future in [pool.submit(work, p) for p in fresh[: limit - progress.seen]]:
                 future.result()
 
