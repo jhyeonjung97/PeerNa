@@ -34,6 +34,12 @@ services:
       # the corpus search embeddings.
       - key: ANTHROPIC_API_KEY
         sync: false
+      # Google sign-in. Without it a hosted server treats every visitor as the
+      # operator: no sign-in, no free-review limit, every model. See auth.py.
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
       # Contact address sent to Crossref with reference lookups. Set in the dashboard.
       - key: AI_PEER_REVIEWER_CONTACT
         sync: false
