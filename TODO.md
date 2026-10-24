@@ -241,6 +241,19 @@ the menu still shows the models as available.
   the server too, since the query must use the model the index was built
   with: check it fits 512 MB (ONNX, not PyTorch) and that retrieval holds up,
   after §3 says retrieval is worth keeping.
+- **Use the reviewer, position and round of each comment.** Stored by parser
+  v2 and so far used only to order comments and to keep the answer key to
+  the first round. Each is a hypothesis to test against §3, not a feature to
+  build on faith:
+  - a point two or three referees of one paper raised independently is
+    likely to matter; rank such precedents higher;
+  - referees tend to put the major points first; check whether position
+    predicts importance before weighting by it;
+  - a first-round point that comes back in the second round is one the
+    authors could not easily answer; those kinds of request may deserve a
+    firmer place in the report;
+  - the distribution of points per referee gives a measured target for how
+    many comments a PeerNa report should carry.
 - **Working files outside the repository.** Test sets, labels and run outputs
   live under `~/.cache/ai-peer-reviewer/`. The scratch directory used before
   2026-10-22 was wiped, taking the ablation reports with it; nothing that a
