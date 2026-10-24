@@ -56,6 +56,27 @@ search results pile onto a context that already holds the manuscript.
 
 ---
 
+## Sonnet is the default
+
+Decided 2026-10-24. The site reviews with Sonnet 5.5 on the Anthropic API by
+default; Luna stays in the menu. Evaluations and measurements from now on run
+Sonnet through Claude Code (`claude -p`, `tools/precedent_eval.py
+--predictor-cli claude-sonnet-5-5 --judge-cli`), so they measure the model that
+is served without paying API prices for it.
+
+Nothing measured says Sonnet reviews better: every result before this date was
+taken on Luna, and the two were never compared on the same papers. The case is
+the price gap (2 / 10 against 0.20 / 1.20 a million tokens), which usually buys
+deeper reading, and the planted-defect run, where Luna's misses were the
+comparisons between distant parts of a paper. The Research Square test is the
+first place to check it.
+
+What it costs: about $0.40 a review against Luna's $0.10, so three free reviews
+are about $1.20 an account. The spend ceiling in TODO §6 matters more now.
+OpenAI is still needed, for Luna and for the corpus search embeddings.
+
+---
+
 ## Models
 
 Registry in `models.py` carries every per-model difference — thinking style,
@@ -66,9 +87,9 @@ the request code stays uniform. Swapping in a model by ID alone would 400.
 |---|---|---|---|
 | Fable 5.1 | 10 / 50 | ~$2.00 | most capable; needs 30-day data retention |
 | Opus 5.5 | 4 / 20 | ~$0.60 | |
-| Sonnet 5.5 | 2 / 10 | ~$0.40 | no list-form refusal fallback |
+| **Sonnet 5.5** | **2 / 10** | **~$0.40** | default from 2026-10-24; no list-form refusal fallback |
 | Haiku 5.5 | 0.10 / 0.50 | ~$0.02 | cheapest per token; review quality unmeasured |
-| **GPT-5.6 Luna** | **0.20 / 1.20** | **~$0.10** | default; every measurement here was taken on it |
+| GPT-5.6 Luna | 0.20 / 1.20 | ~$0.10 | the default until 2026-10-24; every measurement before then was taken on it |
 
 Updated 2026-10-22 when the short names moved to the 5.5 generation and Fable
 5.1. Costs per paper for the Claude models are scaled from the earlier

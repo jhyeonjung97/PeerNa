@@ -232,11 +232,10 @@ REGISTRY: dict[str, ModelSpec] = {
     LUNA.id: LUNA,
 }
 
-#: Luna, and deliberately so. Every measurement in DECISIONS.md was taken on it,
-#: and changing it would invalidate all of them at once. It was the cheapest by
-#: an order of magnitude when chosen; Haiku 5.5 is now cheaper per token, and
-#: whether it reviews as well is unmeasured.
-DEFAULT_MODEL = "luna"
+#: Sonnet from 2026-10-24 (DECISIONS: Sonnet is the default). Every measurement
+#: before that date was taken on Luna, which stays in the menu; the evaluations
+#: from then on run Sonnet through Claude Code so they measure what is served.
+DEFAULT_MODEL = "sonnet"
 
 #: Shown by `--help` and in the cost preview.
 QUALITY_NOTE = {

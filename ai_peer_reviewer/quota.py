@@ -46,10 +46,9 @@ def exempt(email: str | None) -> bool:
     return email in LOCAL or (email or "").lower() in UNLIMITED
 
 
-#: Models a free review may not use. Fable costs about $2 a paper against
-#: Luna's ten cents, so three free reviews on it would be $6 an account — sixty
-#: times the allowance the free tier was priced on. The other Claude models stay
-#: open: Opus, the dearest of them, is a third of Fable.
+#: Models a free review may not use. Fable costs about $2 a paper, so three free
+#: reviews on it would be $6 an account. The free tier is priced on Sonnet, the
+#: default, at about $0.40 a review; Opus, at half again, stays open.
 PAID_ONLY = {"fable"}
 
 

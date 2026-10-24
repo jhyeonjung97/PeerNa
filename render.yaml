@@ -30,11 +30,12 @@ services:
       # out of the repository and out of every build log.
       - key: OPENAI_API_KEY
         sync: false
-      # Only if the Claude models are to be offered.
+      # Required: the default model is Sonnet. OpenAI stays for Luna and for
+      # the corpus search embeddings.
       - key: ANTHROPIC_API_KEY
         sync: false
       - key: AI_PEER_REVIEWER_MODEL
-        value: luna
+        value: sonnet
       # Contact address sent to Crossref with reference lookups. Set in the dashboard.
       - key: AI_PEER_REVIEWER_CONTACT
         sync: false
@@ -73,7 +74,7 @@ services:
       - key: GOOGLE_CLIENT_SECRET
         sync: false
       - key: AI_PEER_REVIEWER_MODEL
-        value: luna
+        value: sonnet
       - key: AI_PEER_REVIEWER_CONTACT
         sync: false
       # The only account that may sign in. Without Google settings as well,
