@@ -21,9 +21,10 @@ from pathlib import Path
 
 from ai_peer_reviewer.corpus_index import DB_PATH, INDEX_DIR
 from ai_peer_reviewer.corpus_sync import DEFAULT_REPO, FILES
+from ai_peer_reviewer.embed_index import since_clause
 
 
-def slim_database(target: Path) -> None:
+def slim_database(target: Path, source: Path = DB_PATH, since: int = 0) -> None:
     """Copy papers and comments without the review files.
 
     Comments are copied with their rowids, which the comment vectors point at;
@@ -38,12 +39,15 @@ def slim_database(target: Path) -> None:
                                kind TEXT DEFAULT 'point', round INTEGER DEFAULT 1);
         """
     )
-    out.execute("ATTACH DATABASE ? AS source", (str(DB_PATH),))
-    out.execute("INSERT INTO papers SELECT slug, title, abstract FROM source.papers")
+    out.execute("ATTACH DATABASE ? AS source", (str(source),))
+    # The same cut as the index (embed_index --since), so the database carries
+    # nothing the vectors cannot reach.
+    where = " WHERE 1" + since_clause(since)
+    out.execute("INSERT INTO papers SELECT slug, title, abstract FROM source.papers" + where)
     columns = "rowid, slug, reviewer, position, text"
     if any(r[1] == "kind" for r in out.execute("PRAGMA source.table_info(comments)")):
         columns += ", kind, round"
-    out.execute(f"INSERT INTO comments ({columns}) SELECT {columns} FROM source.comments")
+    out.execute(f"INSERT INTO comments ({columns}) SELECT {columns} FROM source.comments" + where)
     out.commit()
     out.execute("DETACH DATABASE source")
     out.execute("CREATE INDEX comments_slug ON comments(slug)")
@@ -59,21 +63,29 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--publish", action="store_true",
                         help="Create the GitHub release and upload the files")
     parser.add_argument("--repo", default=DEFAULT_REPO)
+    parser.add_argument("--since", type=int, default=0,
+                        help="Keep papers from this year on, as the index was built.")
+    parser.add_argument("--db", type=Path, default=DB_PATH,
+                        help="Read this copy of the database; a running harvest locks the live one.")
     args = parser.parse_args(argv)
 
     folder = args.out / args.tag
     folder.mkdir(parents=True, exist_ok=True)
     slim = folder / "corpus.sqlite"
-    slim_database(slim)
+    slim_database(slim, args.db, args.since)
 
     packed = []
+    unpacked = 0
     for name in FILES:
         source = slim if name == "corpus.sqlite" else INDEX_DIR / name
         target = folder / (name + ".gz")
         with open(source, "rb") as raw, gzip.open(target, "wb", compresslevel=6) as out:
             shutil.copyfileobj(raw, out, 1 << 20)
         packed.append(target)
-        print(f"  {target.name}: {target.stat().st_size / 1e6:.0f} MB", file=sys.stderr)
+        unpacked += source.stat().st_size
+        print(f"  {target.name}: {target.stat().st_size / 1e6:.0f} MB "
+              f"({source.stat().st_size / 1e6:.0f} MB unpacked)", file=sys.stderr)
+    print(f"  unpacked on the server: {unpacked / 1e6:.0f} MB", file=sys.stderr)
     slim.unlink()
 
     if args.publish:
