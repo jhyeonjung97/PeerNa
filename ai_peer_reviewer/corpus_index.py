@@ -21,6 +21,7 @@ import json
 import re
 import sqlite3
 import time
+import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -63,7 +64,7 @@ REPLY_MARKER = re.compile(
 #: file. Only the former is wanted, and it is introduced by a fixed heading.
 REVIEWER_HEAD = re.compile(r"Reviewer\s*#?\s*(\d)\s*\(Remarks to the Author\)\s*:?", re.I)
 NUMBERED = re.compile(r"(?m)^\s*\(?(\d{1,2})[.)]\s+(?=\S)")
-LICENSE = re.compile(r"Open Access This file.*?creativecommons\.org/licenses/by/4\.0/\.", re.S)
+LICENSE = re.compile(r"Open Access This (?:Peer Review )?[Ff]ile is licensed.*?creativecommons\.org/licenses/by/4\.0/?\.?", re.S)
 
 
 @dataclass
@@ -99,36 +100,210 @@ def schema(connection: sqlite3.Connection) -> None:
             slug TEXT,
             reviewer INTEGER,
             position INTEGER,
-            text TEXT
+            text TEXT,
+            kind TEXT DEFAULT 'point',
+            round INTEGER DEFAULT 1
         );
         CREATE INDEX IF NOT EXISTS comments_slug ON comments(slug);
         """
     )
+    # A database from before comments had a kind and a round gains the two
+    # columns; every existing row reads as a first-round point, which is what
+    # the old parser kept.
+    have = {row[1] for row in connection.execute("PRAGMA table_info(comments)")}
+    if "kind" not in have:
+        connection.execute("ALTER TABLE comments ADD COLUMN kind TEXT DEFAULT 'point'")
+    if "round" not in have:
+        connection.execute("ALTER TABLE comments ADD COLUMN round INTEGER DEFAULT 1")
 
 
-def parse_review(pdf_text: str) -> list[tuple[int, list[str]]]:
-    """Pull each reviewer's numbered comments out of a peer review file."""
+def has_kinds(connection: sqlite3.Connection) -> bool:
+    """Whether this database records a kind per comment. A bundle published
+    before the column existed does not, and a query naming it would fail."""
+    return any(row[1] == "kind" for row in connection.execute("PRAGMA table_info(comments)"))
+
+
+def points_only(connection: sqlite3.Connection) -> str:
+    """The SQL condition that keeps a referee's specific points, or nothing
+    where the database cannot tell points from summaries."""
+    return " AND kind = 'point'" if has_kinds(connection) else ""
+
+
+@dataclass
+class Parsed:
+    """One unit of a referee report: the opening assessment or one point."""
+
+    reviewer: int
+    round: int
+    kind: str          # "summary" or "point"
+    position: int
+    text: str
+
+
+#: Where the authors' side of the file begins inside a reviewer's section: the
+#: rebuttal that follows the last report of a round, or a reply to one comment.
+AUTHOR_SECTION = re.compile(
+    r"(?im)^\s*(?:Response\s+to\s+(?:the\s+)?(?:reviewers?|referees?|comments)|"
+    r"Point[- ]by[- ]point|Rebuttal\b|Dear\s+(?:editor|Dr\b|Prof)|"
+    r"We\s+(?:would\s+like\s+to\s+)?thank\s+(?:all\s+)?(?:the\s+)?(?:three\s+|two\s+|four\s+)?"
+    r"(?:reviewers?|referees?)|Reply\s+to\s+(?:the\s+)?reviewers?|Our\s+(?:response|reply))"
+)
+
+#: Heading a round of reports. The first round is often headed too, so a round
+#: only begins at one that comes after a report.
+ROUND_HEAD = re.compile(r"(?m)^\s*REVIEWERS?['’]?\s+COMMENTS\b")
+
+#: A label standing alone at the end of a report's opening, before its list.
+LIST_LABEL = re.compile(
+    r"(?is)\s*(?:(?:major|minor|specific|general|detailed|other|additional)\s+)?"
+    r"(?:comments?|concerns?|issues?|points?|questions?|remarks?)(?:\s+and\s+\w+)?\s*[:.]?\s*$"
+)
+
+#: A paragraph that gives the verdict, wherever in a prose report it falls.
+VERDICT = re.compile(
+    r"(?i)\b(?:recommend|publication|publishable|accept(?:ed|ance)?|reject|suitable\s+for|"
+    r"addressed\s+(?:all\s+)?(?:my|the)\s+(?:comments|concerns))\b"
+)
+
+#: A table-of-contents line in a rebuttal: "Responses to Reviewer #1 ....... 2".
+DOT_LEADER = re.compile(r"\.{6,}|…{3,}")
+
+SHORTEST_UNIT = 15
+LONGEST_UNIT = 4000
+
+
+def store_comments(connection: sqlite3.Connection, slug: str, parsed: list[Parsed]) -> None:
+    """Replace one paper's comments with these."""
+    connection.execute("DELETE FROM comments WHERE slug = ?", (slug,))
+    connection.executemany(
+        "INSERT INTO comments (slug, reviewer, position, text, kind, round) "
+        "VALUES (?,?,?,?,?,?)",
+        [(slug, p.reviewer, p.position, p.text, p.kind, p.round) for p in parsed],
+    )
+
+
+def _paragraphs(text: str) -> list[str]:
+    """Split extracted PDF text back into paragraphs.
+
+    The text arrives one printed line per line, with no blank line between
+    paragraphs. A paragraph ends on a line that finishes a sentence well short
+    of the full measure, or before a line that opens a list item.
+    """
+    lines = [l.rstrip() for l in text.split("\n")]
+    widths = sorted(len(l) for l in lines if len(l) > 20)
+    measure = widths[len(widths) // 2] if widths else 80
+    out: list[list[str]] = [[]]
+    for line in lines:
+        if not line.strip():
+            if out[-1]:
+                out.append([])
+            continue
+        if out[-1] and (re.match(r"\s*(?:[-•–]\s|\(?[a-z]\)\s|\(?[ivx]+\)\s)", line)
+                        or AUTHOR_SECTION.match(line)):
+            out.append([])
+        out[-1].append(line)
+        if line.endswith((".", "?", "!", ":", ".)")) and len(line) < 0.75 * measure:
+            out.append([])
+    return [" ".join(" ".join(p).split()) for p in out if p]
+
+
+def _shingles(text: str, size: int = 8) -> set[str]:
+    words = re.sub(r"[^a-z0-9 ]", " ", text.lower()).split()
+    return {" ".join(words[i:i + size]) for i in range(max(len(words) - size + 1, 1))}
+
+
+def parse_review(pdf_text: str) -> list[Parsed]:
+    """Each reviewer's report, as an opening assessment and separate points.
+
+    A report is either numbered, in which case the text before the first
+    number is its assessment and each number a point, or written as
+    paragraphs, in which case the first paragraph and any that give the
+    verdict are the assessment and the rest are points. Before this, only
+    numbered points were kept: the assessment of every report was lost, and
+    reports written as prose were lost whole, about half the long ones.
+
+    The authors' rebuttal quotes each report again under the same heading.
+    A section most of whose text has already been seen in this file is such a
+    quotation and is skipped; one that is new is the next round's report.
+    """
     text = LICENSE.sub("", pdf_text)
     heads = list(REVIEWER_HEAD.finditer(text))
-    out: list[tuple[int, list[str]]] = []
+    if not heads:
+        return []
+    round_marks = [m.start() for m in ROUND_HEAD.finditer(text) if m.start() > heads[0].start()]
+    seen_shingles: set[str] = set()
+    seen_keys: set[str] = set()
+    reports_by_reviewer: dict[int, int] = {}
+    out: list[Parsed] = []
+
     for index, head in enumerate(heads):
         stop = heads[index + 1].start() if index + 1 < len(heads) else len(text)
+        # Not cut at the start of the rebuttal: some files carry a report only
+        # as the rebuttal quotes it, comment by comment between the replies.
+        # The replies are dropped one unit at a time instead, below.
         body = text[head.end():stop]
         marks = list(NUMBERED.finditer(body))
-        if not marks:
+
+        units: list[tuple[str, str]] = []
+        if marks:
+            opening = body[:marks[0].start()]
+            for marker in (AUTHOR_SECTION, REPLY_MARKER):
+                found = marker.search(opening)
+                if found:
+                    opening = opening[:found.start()]
+            opening = LIST_LABEL.sub("", opening)
+            if len(opening.split()) >= 25:
+                units.append(("summary", opening))
+            for i, mark in enumerate(marks):
+                end = marks[i + 1].start() if i + 1 < len(marks) else len(body)
+                raw = body[mark.end():end]
+                found = REPLY_MARKER.search(raw)
+                units.append(("point", raw[:found.start()] if found else raw))
+        else:
+            paragraphs = []
+            for paragraph in _paragraphs(body):
+                found = REPLY_MARKER.search(paragraph)
+                if found:
+                    paragraph = paragraph[:found.start()]
+                if len(paragraph.split()) >= 4 and not AUTHOR_SECTION.match(paragraph) \
+                        and not DOT_LEADER.search(paragraph):
+                    paragraphs.append(paragraph)
+            for i, paragraph in enumerate(paragraphs):
+                verdict = i == 0 or (i == len(paragraphs) - 1 and VERDICT.search(paragraph))
+                units.append(("summary" if verdict else "point", paragraph))
+
+        # A unit is already seen when most of its wording is: the rebuttal
+        # quotes each comment again, with the PDF's ligatures sometimes coming
+        # out differently, so exact matching misses the copy.
+        kept, repeated = [], 0
+        for kind, raw in units:
+            item = " ".join(unicodedata.normalize("NFKC", raw).split())
+            if not SHORTEST_UNIT < len(item) < LONGEST_UNIT:
+                continue
+            shingles = _shingles(item)
+            if comment_key(item) in seen_keys or \
+                    len(shingles & seen_shingles) >= 0.5 * len(shingles):
+                repeated += 1
+                continue
+            seen_shingles |= shingles
+            seen_keys.add(comment_key(item))
+            # The authors' replies interleaved with a quoted report are not
+            # marked off; they are recognised by how they read.
+            if is_referee_comment(item):
+                kept.append((kind, item))
+        # Mostly repeats: this section is the rebuttal quoting a report, not a
+        # new report, and does not start a round.
+        if not kept or repeated >= len(kept):
             continue
-        items = []
-        for i, mark in enumerate(marks):
-            end = marks[i + 1].start() if i + 1 < len(marks) else len(body)
-            raw = body[mark.end():end]
-            cut = REPLY_MARKER.search(raw)
-            if cut:
-                raw = raw[:cut.start()]
-            item = " ".join(raw.split())
-            if 15 < len(item) < 4000:
-                items.append(item)
-        if items:
-            out.append((int(head.group(1)), items))
+
+        reviewer = int(head.group(1))
+        by_heading = 1 + sum(1 for m in round_marks if m < head.start())
+        reports_by_reviewer[reviewer] = reports_by_reviewer.get(reviewer, 0) + 1
+        # Headings mark some rounds and not others; a reviewer's next new report
+        # is their next round either way.
+        round_ = max(by_heading, reports_by_reviewer[reviewer])
+        for position, (kind, item) in enumerate(kept, 1):
+            out.append(Parsed(reviewer, round_, kind, position, item))
     return out
 
 
@@ -282,9 +457,9 @@ def example_comments() -> list[str]:
                 # cache survives between runs. Harvesting more papers does move
                 # the sample; that is a rebuild, not a per-run change.
                 # LIMIT is generous because most rows fail the filters below.
-                """SELECT text FROM comments
-                   WHERE length(text) BETWEEN ? AND ? AND text LIKE '%.'
-                   ORDER BY substr(text, -3), rowid LIMIT 2000""",
+                "SELECT text FROM comments WHERE length(text) BETWEEN ? AND ? "
+                "AND text LIKE '%.'" + points_only(connection) +
+                " ORDER BY substr(text, -3), rowid LIMIT 2000",
                 (low * 6, high * 7),
             ).fetchall()
             good = [
@@ -384,7 +559,8 @@ def similar(text: str, k: int = 5, exclude: str = "") -> list[Neighbour]:
             ).fetchone()
             comments = [
                 r[0] for r in connection.execute(
-                    "SELECT text FROM comments WHERE slug = ? ORDER BY reviewer, position",
+                    "SELECT text FROM comments WHERE slug = ?" + points_only(connection)
+                    + " ORDER BY round, reviewer, position",
                     (slug,),
                 )
             ]

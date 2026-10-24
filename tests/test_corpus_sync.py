@@ -29,7 +29,8 @@ def main() -> int:
         db.execute("CREATE TABLE review_text (slug TEXT PRIMARY KEY, text TEXT)")
         db.execute("INSERT INTO papers VALUES ('a', 'A', 'abstract')")
         for n in range(5):
-            db.execute("INSERT INTO comments VALUES ('a', 1, ?, ?)", (n, f"comment {n}"))
+            db.execute("INSERT INTO comments (slug, reviewer, position, text) VALUES ('a', 1, ?, ?)",
+                       (n, f"comment {n}"))
         db.execute("DELETE FROM comments WHERE position = 1")  # leave a gap in rowids
         db.execute("INSERT INTO review_text VALUES ('a', 'raw')")
         db.commit()

@@ -121,8 +121,12 @@ def real_comments(slug: str) -> list[str]:
         # The answer key gets the same filter as the precedents: a reply the
         # parser left in ("We have added ICP-MS data") would let a prediction
         # match the authors rather than the referee.
+        # First-round points: what the referees asked of the manuscript as
+        # submitted, which is the text the predictor is given.
+        first = " AND round = 1" if corpus_index.has_kinds(connection) else ""
         return [t for (t,) in connection.execute(
-            "SELECT text FROM comments WHERE slug = ? ORDER BY reviewer, position", (slug,))
+            "SELECT text FROM comments WHERE slug = ?" + corpus_index.points_only(connection)
+            + first + " ORDER BY reviewer, position", (slug,))
             if corpus_index.is_referee_comment(t)]
     finally:
         connection.close()

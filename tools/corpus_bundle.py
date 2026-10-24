@@ -34,15 +34,16 @@ def slim_database(target: Path) -> None:
     out.executescript(
         """
         CREATE TABLE papers (slug TEXT PRIMARY KEY, title TEXT, abstract TEXT);
-        CREATE TABLE comments (slug TEXT, reviewer INTEGER, position INTEGER, text TEXT);
+        CREATE TABLE comments (slug TEXT, reviewer INTEGER, position INTEGER, text TEXT,
+                               kind TEXT DEFAULT 'point', round INTEGER DEFAULT 1);
         """
     )
     out.execute("ATTACH DATABASE ? AS source", (str(DB_PATH),))
     out.execute("INSERT INTO papers SELECT slug, title, abstract FROM source.papers")
-    out.execute(
-        "INSERT INTO comments (rowid, slug, reviewer, position, text) "
-        "SELECT rowid, slug, reviewer, position, text FROM source.comments"
-    )
+    columns = "rowid, slug, reviewer, position, text"
+    if any(r[1] == "kind" for r in out.execute("PRAGMA source.table_info(comments)")):
+        columns += ", kind, round"
+    out.execute(f"INSERT INTO comments ({columns}) SELECT {columns} FROM source.comments")
     out.commit()
     out.execute("DETACH DATABASE source")
     out.execute("CREATE INDEX comments_slug ON comments(slug)")

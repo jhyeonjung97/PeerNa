@@ -21,6 +21,9 @@ from .corpus_index import (
     embed,
     is_referee_comment,
     parse_review,
+    points_only,
+    schema,
+    store_comments,
 )
 
 #: Comments shorter than this are almost all fragments the parser cut loose —
@@ -39,19 +42,14 @@ def reparse() -> tuple[int, int]:
     rather than vanish. Returns (papers re-parsed, comments now stored).
     """
     connection = sqlite3.connect(DB_PATH)
+    schema(connection)
     rows = connection.execute("SELECT slug, text FROM review_text").fetchall()
     redone = 0
     for slug, text in rows:
-        reviews = parse_review(text or "")
-        if not reviews:
+        parsed = parse_review(text or "")
+        if not parsed:
             continue
-        connection.execute("DELETE FROM comments WHERE slug = ?", (slug,))
-        connection.executemany(
-            "INSERT INTO comments VALUES (?,?,?,?)",
-            [(slug, reviewer, position, item)
-             for reviewer, items in reviews
-             for position, item in enumerate(items, 1)],
-        )
+        store_comments(connection, slug, parsed)
         redone += 1
     connection.commit()
     total = connection.execute("SELECT count(*) FROM comments").fetchone()[0]
@@ -100,8 +98,11 @@ def rebuild_comments(progress=None) -> int:
 
     INDEX_DIR.mkdir(parents=True, exist_ok=True)
     connection = sqlite3.connect(DB_PATH)
+    # Points only: an opening assessment ("an interesting study of…") is about
+    # the paper as a whole and would match every part of every manuscript.
     rows = connection.execute(
-        "SELECT rowid, slug, text FROM comments WHERE length(text) >= ? ORDER BY rowid",
+        "SELECT rowid, slug, text FROM comments WHERE length(text) >= ?"
+        + points_only(connection) + " ORDER BY rowid",
         (SHORTEST_COMMENT,),
     ).fetchall()
     connection.close()

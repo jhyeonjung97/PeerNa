@@ -20,6 +20,7 @@ import sqlite3
 import sys
 import threading
 import time
+import urllib.error
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
@@ -31,6 +32,7 @@ from .corpus_index import (
     REVIEWER_HEAD,
     LICENSE,
     parse_review,
+    store_comments,
     schema,
 )
 from .fetch import EPMC, SPRINGER_ESM, WANTED, _get
@@ -44,6 +46,8 @@ WORKERS = int(os.environ.get("PEERNA_HARVEST_WORKERS") or 3)
 COURTESY = float(os.environ.get("PEERNA_HARVEST_COURTESY") or 2.0)
 
 PAGE = 100
+
+SEARCH_ATTEMPTS = 40
 
 
 @dataclass
@@ -64,7 +68,18 @@ def search_page(query: str, cursor: str) -> tuple[list[dict], str]:
             "resultType": "lite",
         }
     )
-    payload = json.loads(_get(f"{EPMC}/search?{params}").decode())
+    # The search is the one call a harvest cannot skip past, and Europe PMC's
+    # search service goes down for spells while full texts still load: one
+    # such 503 ended a night's harvest. Wait it out, for up to about three hours.
+    for attempt in range(SEARCH_ATTEMPTS):
+        try:
+            payload = json.loads(_get(f"{EPMC}/search?{params}").decode())
+            break
+        except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError) as error:
+            if attempt == SEARCH_ATTEMPTS - 1 or getattr(error, "code", 503) < 500:
+                raise
+            print(f"  search unavailable ({error}); retrying", file=sys.stderr, flush=True)
+            time.sleep(min(60 * (attempt + 1), 300))
     results = [r for r in payload.get("resultList", {}).get("result", []) if r.get("pmcid")]
     return results, payload.get("nextCursorMark") or cursor
 
@@ -173,13 +188,7 @@ def run(query: str, limit: int, on_progress=None) -> Progress:
                     "INSERT OR REPLACE INTO review_text VALUES (?,?)",
                     (result["slug"], result["raw_text"]),
                 )
-                connection.execute("DELETE FROM comments WHERE slug = ?", (result["slug"],))
-                for reviewer, items in result["reviews"]:
-                    for position, text in enumerate(items, 1):
-                        connection.execute(
-                            "INSERT INTO comments VALUES (?,?,?,?)",
-                            (result["slug"], reviewer, position, text),
-                        )
+                store_comments(connection, result["slug"], result["reviews"])
                 progress.stored += 1
             # By papers looked at, not stored: a stretch of turned-down papers
             # would otherwise go uncommitted, and be read again after a restart.
