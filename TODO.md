@@ -142,7 +142,8 @@ to tune on.
 
 **Index.** `corpus-2026-10-24`: papers registered from 2022, 37,990, with
 1,098,322 first-and-later-round points, comment vectors as int8 (top-8 search
-results 97% the same as float16). Published and live on both servers. The
+results 97% the same as float16). Published; live on peerna-dev, while peerna
+still has `corpus-2026-10` until `AI_PEER_REVIEWER_CORPUS` is changed there. The
 snapshot `~/PeerNa-data/corpus-2026-10-24.sqlite` is what the test reads and
 the backup `~/.cache` lacks. The harvest carries on back to 2016 into the live
 database only.
