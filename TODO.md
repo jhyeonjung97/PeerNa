@@ -111,13 +111,17 @@ manuscripts with the publication stamp redacted, `testset.slugs` the list.
 
 In order:
 
-1. **Wait for the harvest** (`harvest-2026-10/`, started 2026-10-22). It roughly
-   doubles the field's papers and writes a list of held-out papers published
-   from June 2026.
-2. **Re-parse and re-index.** Re-parse `review_text` with the current reply
-   marker, rebuild the paper vectors and, with `--comments`, the comment
-   vectors, which applies `is_referee_comment` (~$0.2). Check the result still
-   fits the 2 GB Render disk.
+1. **Finish the whole-journal harvest** (`harvest-2026-10-all/`). The held-out
+   set (published from 2026-06-01) is done: 3,240 papers in
+   `harvest-2026-10/heldout.txt`. Stage A was stopped twice by Europe PMC
+   search outages and is running again from 2023-08-25 back to 2016; 34,450
+   papers and 3.5 GB before the restart. Before 2022-11 review files were
+   optional, so about 40% of the older papers have none.
+2. **Re-parse and re-index** with parser v2 (step 3b, done):
+   `python3 -m ai_peer_reviewer.embed_index --reparse --comments` on the
+   master DB, a few dollars. Retry the failed papers. Bundle with
+   `tools.corpus_bundle`; if the bundle passes 2 GB, keep only the last three
+   or five years (the year is in the slug) rather than shrinking vectors.
 3. **Run it.**
 
        python -m tools.precedent_eval ~/PeerNa-data/rsquare/pdf-clean OUT \
@@ -126,15 +130,13 @@ In order:
    Web search stays off (it finds the published paper). About $28. Report the
    field subset and the years separately: the papers are from 2020 to 2026 and
    the predictor may have read the older ones.
-3b. **Parse what the parser drops**, in the same re-parse. It keeps numbered
-   items only: the opening assessment of each report (median ~150 words) is
-   lost, and so are reports written as paragraphs, about 1,000 of 2,100
-   unnumbered reports in a 400-file sample running to 150 words or more.
-   Store a `kind` per comment (`summary` for the opening assessment, `point`
-   for each numbered item or, in a prose report, each paragraph) and the
-   review round, since second-round comments mostly say whether a point was
-   answered. Points feed precedents; summaries may inform the opening
-   paragraph and the recommendation.
+3b. **Parser v2 — done** (e5458f6). Each comment has a `kind` (`summary` for
+   a report's opening assessment, `point` for each numbered item or prose
+   paragraph) and a review `round`. Rebuttal quotes and author replies are
+   dropped per unit. On 31,834 files: 954,530 points (693,071 first-round)
+   and 176,982 summaries, about 29% more points than before. Precedents and
+   the answer key use points only, the answer key first round only;
+   summaries are stored and untried.
 4. **Decide.** If part by part wins, merge `method-level-precedent` and point
    the production server at the corpus release (`AI_PEER_REVIEWER_CORPUS`,
    DEPLOY: The corpus index). `corpus-2026-10` is published: 11,797 papers and
