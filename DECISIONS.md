@@ -77,7 +77,8 @@ OpenAI is still needed, for the corpus search embeddings.
 
 The same day the site menu narrowed to Sonnet, Opus and Fable
 (`models.SITE_MODELS`), with Opus and Fable for paid reviews only. Haiku and
-Luna stay on the command line and in the evaluation tools; the server refuses a
+Luna stay on the command line and in the evaluation tools (Luna went back on
+the menu later that day, free, as the cheap choice); the server refuses a
 request that names them, and a configured default it no longer offers falls
 back to Sonnet. The server now needs `ANTHROPIC_API_KEY` to start.
 

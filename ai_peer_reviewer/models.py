@@ -214,9 +214,9 @@ LUNA = ModelSpec(
 ALIASES = ("luna", "fable", "opus", "sonnet", "haiku")
 
 #: What the site offers, a narrower list than the command line's. Haiku and Luna
-#: were taken off the menu on 2026-10-24 with Sonnet as the default; they stay
-#: reachable from the command line and the evaluation tools.
-SITE_MODELS = ("sonnet", "opus", "fable")
+#: were taken off the menu on 2026-10-24 with Sonnet as the default, and Luna
+#: put back the same day as the cheap choice; Haiku stays on the command line.
+SITE_MODELS = ("sonnet", "luna", "opus", "fable")
 
 
 def site_model(name: str | None) -> str:
@@ -264,7 +264,7 @@ QUALITY_NOTE = {
     "opus": "Best value for real reviews. Catches subtle methodological problems.",
     "sonnet": "Solid. Good for iterating on your own drafts.",
     "haiku": "Cheapest per token, fast. Command line only; review quality unmeasured.",
-    "luna": "Cheap (OpenAI); the default until 2026-10-24. Command line only. Needs OPENAI_API_KEY.",
+    "luna": "Cheap (OpenAI); the default until 2026-10-24. Expect shallower findings than Sonnet. Needs OPENAI_API_KEY.",
 }
 
 #: Environment variable each provider's SDK reads.
