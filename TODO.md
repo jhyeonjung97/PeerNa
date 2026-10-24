@@ -68,11 +68,13 @@ the manuscript to check it.
 
 ## 1. Measure the checks
 
-The checks went in after the ablation, so their effect is unmeasured. The same
-ten flawed papers and the same answer sheet are on disk; re-running gives the
-number directly. Of the 79 defects, 28 are cross-reference or reference-number
-errors — the categories where both arms scored worst — so this is where the
-headroom is. ~$1.20, 40 minutes.
+The checks went in after the ablation, so their effect is unmeasured. The ten
+flawed papers and their answer sheet are **not** on disk any more, whatever
+this file said before: a search on 2026-10-24 found neither, most likely gone
+with the scratch directory wiped on 2026-10-22. Re-plant about 80 defects in
+ten published papers, keep them under `~/PeerNa-data/`, and run both arms
+again, with the checks and without, since the old 31 / 79 was measured on other
+defects. About $2.50 on Luna, 90 minutes.
 
 ## 2. A human reads them blind
 
