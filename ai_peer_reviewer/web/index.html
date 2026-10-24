@@ -450,8 +450,8 @@ function loadModels(keep) {
       const o = document.createElement("option");
       o.value = m.key;
       o.textContent = `${m.label}` +
-        (!m.ready ? "  (no API key)" : m.paid ? "  (paid)"
-          : m.allowed === false ? "  (not on free reviews)" : "");
+        (!m.ready ? "  (no API key)"
+          : m.paid || m.allowed === false ? "  (not on free reviews)" : "");
       o.disabled = !m.ready || m.paid || m.allowed === false;
       o.title = m.caution ? `${m.note}\n\n${m.caution}` : m.note;
       if (m.key === want && !o.disabled) o.selected = true;
