@@ -415,7 +415,7 @@ function startSignIn(e) {
   if (!popup) { location.href = "/auth/login?agreed=1"; return; }
   // Some browsers close the window without the message ever arriving, so the
   // poll is what actually ends this; the message only makes it quick.
-  // The menu depends on who is signed in: a free account cannot pick Fable.
+  // The menu depends on who is signed in: a free account cannot pick Fable or Opus.
   const done = () => { clearInterval(watch); loadAccount(); loadHistory(); loadModels(); };
   const watch = setInterval(() => { if (popup.closed) done(); }, 500);
   window.addEventListener("message", function once(ev) {

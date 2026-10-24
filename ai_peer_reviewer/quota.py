@@ -46,10 +46,10 @@ def exempt(email: str | None) -> bool:
     return email in LOCAL or (email or "").lower() in UNLIMITED
 
 
-#: Models a free review may not use. Fable costs about $2 a paper, so three free
-#: reviews on it would be $6 an account. The free tier is priced on Sonnet, the
-#: default, at about $0.40 a review; Opus, at half again, stays open.
-PAID_ONLY = {"fable"}
+#: Models a free review may not use. The free tier is priced on Sonnet, the
+#: default, at about $0.40 a review; Fable at about $2 and Opus at about $0.60
+#: are for paid reviews only (decided 2026-10-24).
+PAID_ONLY = {"fable", "opus"}
 
 
 def allowed(email: str | None, spec) -> bool:
