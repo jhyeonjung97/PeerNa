@@ -45,9 +45,14 @@ def slim_database(target: Path, source: Path | None = None, since: int = 0) -> N
     where = " WHERE 1" + since_clause(since)
     out.execute("INSERT INTO papers SELECT slug, title, abstract FROM source.papers" + where)
     columns = "rowid, slug, reviewer, position, text"
+    points = ""
     if any(r[1] == "kind" for r in out.execute("PRAGMA source.table_info(comments)")):
         columns += ", kind, round"
-    out.execute(f"INSERT INTO comments ({columns}) SELECT {columns} FROM source.comments" + where)
+        # Opening assessments are kept here for study; the server searches and
+        # quotes points only, so they would be disk spent on nothing there.
+        points = " AND kind = 'point'"
+    out.execute(f"INSERT INTO comments ({columns}) SELECT {columns} FROM source.comments"
+                + where + points)
     out.commit()
     out.execute("DETACH DATABASE source")
     out.execute("CREATE INDEX comments_slug ON comments(slug)")
@@ -76,8 +81,26 @@ def main(argv: list[str] | None = None) -> int:
 
     packed = []
     unpacked = 0
+    import json
+
+    import numpy as np
+
+    from ai_peer_reviewer.corpus_index import quantize
+
+    # The comment vectors go as int8 with their scale beside the ids: half the
+    # size of the float16 kept here, which is what fits the server's disk.
+    vectors, scale = quantize(np.load(INDEX_DIR / "comment_vectors.npy", mmap_mode="r"))
+    np.save(folder / "comment_vectors.npy", vectors)
+    del vectors
+    ids = json.loads((INDEX_DIR / "comment_ids.json").read_text())
+    ids["scale"] = scale
+    (folder / "comment_ids.json").write_text(json.dumps(ids))
+    staged = {"corpus.sqlite": slim,
+              "comment_vectors.npy": folder / "comment_vectors.npy",
+              "comment_ids.json": folder / "comment_ids.json"}
+
     for name in FILES:
-        source = slim if name == "corpus.sqlite" else INDEX_DIR / name
+        source = staged.get(name, INDEX_DIR / name)
         target = folder / (name + ".gz")
         with open(source, "rb") as raw, gzip.open(target, "wb", compresslevel=6) as out:
             shutil.copyfileobj(raw, out, 1 << 20)
@@ -86,7 +109,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  {target.name}: {target.stat().st_size / 1e6:.0f} MB "
               f"({source.stat().st_size / 1e6:.0f} MB unpacked)", file=sys.stderr)
     print(f"  unpacked on the server: {unpacked / 1e6:.0f} MB", file=sys.stderr)
-    slim.unlink()
+    for path in staged.values():
+        path.unlink()
 
     if args.publish:
         subprocess.run(

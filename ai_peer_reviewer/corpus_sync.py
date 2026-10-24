@@ -38,6 +38,22 @@ FILES = ("corpus.sqlite", "vectors.npy", "ids.json",
          "comment_vectors.npy", "comment_ids.json")
 
 
+#: Unpacked over packed size, measured on corpus-2026-10-24 (1,534 / 854 MB)
+#: and rounded up; and room left over for the reviews that share the disk.
+UNPACKED = 2.0
+SPARE = 200 * 1024 * 1024
+
+
+def _remove_index() -> None:
+    from . import corpus_index
+
+    corpus_index._comment_index = None
+    MARKER.unlink(missing_ok=True)
+    for name in FILES:
+        (INDEX_DIR / name).unlink(missing_ok=True)
+        (INDEX_DIR / (name + ".partial")).unlink(missing_ok=True)
+
+
 def current() -> str:
     return MARKER.read_text().strip() if MARKER.is_file() else ""
 
@@ -95,12 +111,18 @@ def fetch(tag: str, token: str, repo: str = DEFAULT_REPO) -> bool:
     api = f"https://api.github.com/repos/{repo}/releases/tags/{tag}"
     with urllib.request.urlopen(_request(api, token, "application/vnd.github+json"),
                                 timeout=60) as reply:
-        assets = {a["name"]: a["url"] for a in json.load(reply)["assets"]}
+        listed = json.load(reply)["assets"]
+    assets = {a["name"]: a["url"] for a in listed}
     missing = [f for f in FILES if f + ".gz" not in assets]
     if missing:
         raise RuntimeError(f"Release {tag} lacks {', '.join(missing)}")
 
     INDEX_DIR.mkdir(parents=True, exist_ok=True)
+    packed = sum(a.get("size", 0) for a in listed if a["name"] in {f + ".gz" for f in FILES})
+    if shutil.disk_usage(INDEX_DIR).free < UNPACKED * packed + SPARE:
+        # No room for the new index beside the old: drop the old one first.
+        # Reviews meanwhile run without precedents, as they do on a first start.
+        _remove_index()
     for name in FILES:
         partial = INDEX_DIR / (name + ".partial")
         with _download(assets[name + ".gz"], token) as reply, \

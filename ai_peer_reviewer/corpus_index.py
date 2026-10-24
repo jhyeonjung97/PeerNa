@@ -591,8 +591,33 @@ def load_comment_vectors():
             np.load(COMMENT_VECTORS_PATH, mmap_mode="r"),
             np.array(ids["rowid"]),
             np.array(ids["slug"]),
+            # A bundle stores the vectors as int8 times this; the index built
+            # here keeps them in float16, at a scale of one.
+            float(ids.get("scale", 1.0)),
         )
     return _comment_index
+
+
+#: Every component of a unit vector at 512 dimensions lies well inside this;
+#: across the 2026-10 index the largest was 0.28.
+INT8_RANGE = 0.3
+
+
+def quantize(vectors) -> "tuple[object, float]":
+    """The vectors as int8 and the scale that turns them back, for a bundle.
+
+    Half the size of float16, which is what fits the index on the server's
+    disk. One scale for all: ranking compares one query against every comment,
+    so a per-vector scale would change the scores and not the order much.
+    """
+    import numpy as np
+
+    scale = INT8_RANGE / 127
+    out = np.empty(vectors.shape, dtype="int8")
+    for i in range(0, len(vectors), SCORE_BLOCK):
+        block = np.asarray(vectors[i:i + SCORE_BLOCK], dtype="float32")
+        out[i:i + SCORE_BLOCK] = np.clip(np.rint(block / scale), -127, 127)
+    return out, scale
 
 
 def has_comment_index() -> bool:
@@ -622,7 +647,7 @@ def precedents(
     index = load_comment_vectors()
     if index is None or not queries:
         return [[] for _ in queries]
-    vectors, rowids, slugs = index
+    vectors, rowids, slugs, scale = index
 
     allowed = slugs != exclude
     if papers is not None:
@@ -636,7 +661,7 @@ def precedents(
     scores = np.concatenate([
         asked @ vectors[candidates[i:i + SCORE_BLOCK]].astype("float32").T
         for i in range(0, candidates.size, SCORE_BLOCK)
-    ], axis=1)
+    ], axis=1) * scale
 
     connection = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True, timeout=10.0)
     try:
