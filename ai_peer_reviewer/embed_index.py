@@ -33,6 +33,17 @@ SHORTEST_COMMENT = 40
 BATCH = 500
 
 
+def since_clause(since: int, column: str = "slug") -> str:
+    """SQL keeping papers from `since` on, by the year in a Nature slug.
+
+    `s41467-021-22047-w` was registered in 2021; the year a DOI is registered
+    is the year of acceptance, near enough to publication for a cut-off.
+    """
+    if not since:
+        return ""
+    return f" AND CAST(substr({column}, 8, 3) AS INTEGER) >= {int(since) - 2000}"
+
+
 def reparse() -> tuple[int, int]:
     """Parse every stored review file again with the current parser.
 
@@ -57,13 +68,14 @@ def reparse() -> tuple[int, int]:
     return redone, total
 
 
-def rebuild(progress=None) -> int:
+def rebuild(progress=None, since: int = 0) -> int:
     import numpy as np
 
     INDEX_DIR.mkdir(parents=True, exist_ok=True)
     connection = sqlite3.connect(DB_PATH)
     rows = connection.execute(
-        "SELECT slug, title, abstract FROM papers ORDER BY slug"
+        "SELECT slug, title, abstract FROM papers WHERE 1" + since_clause(since)
+        + " ORDER BY slug"
     ).fetchall()
     connection.close()
     if not rows:
@@ -86,7 +98,7 @@ def rebuild(progress=None) -> int:
     return len(slugs)
 
 
-def rebuild_comments(progress=None) -> int:
+def rebuild_comments(progress=None, since: int = 0) -> int:
     """One vector per referee comment, for finding precedents part by part.
 
     Reference-list entries and the authors' replies are left out here though
@@ -102,7 +114,7 @@ def rebuild_comments(progress=None) -> int:
     # the paper as a whole and would match every part of every manuscript.
     rows = connection.execute(
         "SELECT rowid, slug, text FROM comments WHERE length(text) >= ?"
-        + points_only(connection) + " ORDER BY rowid",
+        + points_only(connection) + since_clause(since) + " ORDER BY rowid",
         (SHORTEST_COMMENT,),
     ).fetchall()
     connection.close()
@@ -137,6 +149,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="Rebuild the per-comment index and leave the papers alone.")
     parser.add_argument("--reparse", action="store_true",
                         help="First re-parse the stored review files into comments (free).")
+    parser.add_argument("--since", type=int, default=0,
+                        help="Index papers from this year on only, e.g. 2021.")
     args = parser.parse_args(argv)
 
     def report(done: int, total: int) -> None:
@@ -146,10 +160,10 @@ def main(argv: list[str] | None = None) -> int:
         papers, comments = reparse()
         print(f"Re-parsed {papers} review files; {comments} comments.", file=sys.stderr)
     if not args.comments_only:
-        count = rebuild(report)
+        count = rebuild(report, args.since)
         print(f"Indexed {count} papers.", file=sys.stderr)
     if args.comments or args.comments_only:
-        count = rebuild_comments(report)
+        count = rebuild_comments(report, args.since)
         print(f"Indexed {count} comments.", file=sys.stderr)
     return 0
 
