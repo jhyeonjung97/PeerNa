@@ -34,8 +34,6 @@ services:
       # the corpus search embeddings.
       - key: ANTHROPIC_API_KEY
         sync: false
-      - key: AI_PEER_REVIEWER_MODEL
-        value: sonnet
       # Contact address sent to Crossref with reference lookups. Set in the dashboard.
       - key: AI_PEER_REVIEWER_CONTACT
         sync: false
@@ -73,8 +71,6 @@ services:
         sync: false
       - key: GOOGLE_CLIENT_SECRET
         sync: false
-      - key: AI_PEER_REVIEWER_MODEL
-        value: sonnet
       - key: AI_PEER_REVIEWER_CONTACT
         sync: false
       # The only account that may sign in. Without Google settings as well,
