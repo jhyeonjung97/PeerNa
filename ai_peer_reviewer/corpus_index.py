@@ -20,8 +20,10 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
+import threading
 import time
 import unicodedata
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -526,6 +528,30 @@ def load_vectors():
     return np.load(VECTORS_PATH, mmap_mode="r"), json.loads(IDS_PATH.read_text())
 
 
+_scope = threading.local()
+
+
+@contextmanager
+def restricted_to(slugs: "set[str] | None"):
+    """Search only these papers, in this thread, for the duration.
+
+    For evaluation: a manuscript submitted in 2025 must not be shown the reviews
+    of papers published after it, which its referees could not have read and
+    nor could a user then. Per thread, because the evaluation runs several
+    manuscripts at once, each with its own cut-off.
+    """
+    before = getattr(_scope, "slugs", None)
+    _scope.slugs = slugs
+    try:
+        yield
+    finally:
+        _scope.slugs = before
+
+
+def _searchable() -> "set[str] | None":
+    return getattr(_scope, "slugs", None)
+
+
 def nearest_papers(text: str, k: int, exclude: str = "") -> list[tuple[str, float]]:
     """Slugs of the k papers whose title and abstract sit closest to this text."""
     import numpy as np
@@ -535,8 +561,11 @@ def nearest_papers(text: str, k: int, exclude: str = "") -> list[tuple[str, floa
         return []
     scores = vectors @ _unit(embed([text])[0])  # rows are already unit length
     found = []
+    allowed = _searchable()
     for position in np.argsort(-scores):
         if ids[int(position)] == exclude:
+            continue
+        if allowed is not None and ids[int(position)] not in allowed:
             continue
         found.append((ids[int(position)], float(scores[position])))
         if len(found) == k:
@@ -652,6 +681,8 @@ def precedents(
     allowed = slugs != exclude
     if papers is not None:
         allowed &= np.isin(slugs, list(papers))
+    if _searchable() is not None:
+        allowed &= np.isin(slugs, list(_searchable()))
     candidates = np.flatnonzero(allowed)
     if not candidates.size:
         return [[] for _ in queries]

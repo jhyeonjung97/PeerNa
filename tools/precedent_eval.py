@@ -1,64 +1,70 @@
-"""Does the corpus help predict what referees will ask for? Part by part or whole?
+"""Does the corpus help predict what referees will ask for, and does the model?
 
-The test in DECISIONS.md, re-run on papers the model cannot have seen, with a
-third arm. Each paper is held out of the index; its own referee comments are
-the answer key. Three arms predict twelve referee demands each:
+Each test manuscript is held out of the index; its own first-round referee
+comments are the answer key. Every predictor makes twelve predictions in each of
+three arms:
 
     prior   the manuscript alone
     paper   plus every comment on the six nearest papers (the old precedent pass)
     part    plus the comments found for each part of the manuscript (the new one)
 
-A judge from a different model family then marks each prediction against the
-real comments, with all thirty-six shuffled together and unlabelled, so it can
-neither favour an arm nor share the predictor's habits.
+and every judge then marks all of them for that manuscript at once, every
+predictor's and every arm's, shuffled and unlabelled, against the real comments.
+
+Built so that a run never has to be repeated for a fault found afterwards:
+
+- Predicting is the expensive stage and is stored whole: the prompt, the
+  material, its sources, the manuscript's hash, model, effort, index and commit.
+  Judging and counting read only what is stored, so they can be redone or
+  extended (another judge, another tally) without predicting again.
+- With --dates, a manuscript is shown precedents only from papers published
+  before it was received, as its referees and a user at the time would have been.
+- Two judges from different companies, so a judge's taste for its own family's
+  wording shows up as disagreement rather than as a result.
 
 By default the manuscript is the published version, which already contains what
-the referees asked for — "we added ICP-MS" gives the request away. That flatters
-every arm, and the manuscript-alone arm most, since it is the arm that leans
-hardest on what the text gives away. --submitted runs the honest version: the
-manuscript as first submitted, from a Research Square "In Review" preprint, with
-the paper's own reviews still the answer key.
+the referees asked for; --submitted runs the honest version, a Research Square
+"In Review" preprint as first submitted.
 
-    python -m tools.precedent_eval MANUSCRIPTS OUT [--slugs FILE] [--submitted]
+    python -m tools.precedent_eval MANUSCRIPTS OUT --slugs FILE --submitted \\
+        --testset testset.json --dates published-dates.json \\
+        --predictors luna,cli:claude-sonnet-5-5 --judges cli:claude-sonnet-5-5,luna
 
-MANUSCRIPTS holds <slug>.txt or <slug>.pdf for each test paper. Without --slugs
-the test papers are those missing from the paper index; with it, the listed
-ones, each kept out of its own search. Every stage is written to OUT as it
+MANUSCRIPTS holds <slug>.txt or <slug>.pdf. Every stage is written to OUT as it
 finishes, so an interrupted run resumes where it stopped.
 """
 
 from __future__ import annotations
 
 import argparse
+import datetime as dt
+import hashlib
 import json
 import os
 import random
 import re
 import sqlite3
+import statistics
+import subprocess
 import sys
 import threading
 from concurrent.futures import ThreadPoolExecutor
-from math import comb
+from math import comb, sqrt
 from pathlib import Path
 
 from pydantic import BaseModel, Field
 
-from ai_peer_reviewer import backends, config, corpus_index, models
+from ai_peer_reviewer import backends, config, corpus_index, corpus_sync, models
 from ai_peer_reviewer.loader import Manuscript
 from ai_peer_reviewer.parts import TextPart
 from ai_peer_reviewer.review import Reviewer
 
 ARMS = ("prior", "paper", "part")
 PREDICTIONS = 12
-PREDICTOR = "luna"
-#: Another model family from the predictor, so it cannot favour its own habits.
-#: Thinking is off: the answer is one list of ids, and on Sonnet 5 the thinking
-#: alone ran past 16,000 output tokens a paper — most of the cost of judging.
-JUDGE = "claude-sonnet-5-5"
-#: Judge through Claude Code (`claude -p`) instead of the API; set by --judge-cli.
-JUDGE_CLI = False
-#: Predict through Claude Code too; set by --predictor-cli MODEL.
-PREDICT_CLI = False
+#: The same effort for every predictor. The site runs its passes at high, so
+#: that is what is measured; the judges answer one list and run at low.
+PREDICT_EFFORT = "high"
+JUDGE_EFFORT = "low"
 
 #: The published text runs to 60–90k characters; the referees read the
 #: submitted one, so nothing past the main text is needed to guess at them.
@@ -88,6 +94,8 @@ Write every prediction in your own words.
 {material}
 """
 
+JUDGE_SYSTEM = "You mark predictions against an answer key and reply with JSON only."
+
 JUDGE_PROMPT = """\
 Below are the comments the referees actually wrote about a manuscript, then a
 list of predicted referee requests. For each prediction, decide whether at least
@@ -111,17 +119,78 @@ class Predictions(BaseModel):
     predictions: list[str] = Field(description=f"Exactly {PREDICTIONS} predictions, one sentence each.")
 
 
-def held_out() -> list[str]:
-    indexed = set(json.loads(corpus_index.IDS_PATH.read_text()))
-    connection = sqlite3.connect(corpus_index.DB_PATH)
-    try:
-        return sorted(s for (s,) in connection.execute("SELECT slug FROM papers") if s not in indexed)
-    finally:
-        connection.close()
+class Hits(BaseModel):
+    hits: list[str]
 
+
+# ------------------------------------------------------------- models
+
+def claude_cli(system: str, prompt: str, model: str, schema: dict | None = None,
+               effort: str = "low") -> dict:
+    """One call through Claude Code (`claude -p`), on its subscription, not the API.
+
+    The API key is kept out of the child's environment, or Claude Code would
+    bill it. No tools, MCP servers, settings, skills or saved session, and an
+    empty working directory: without these the call carries some 80,000 tokens
+    of the operator's own setup, down to the language it answers in.
+    """
+    import tempfile
+
+    env = {k: v for k, v in os.environ.items() if k not in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN")}
+    command = ["claude", "-p", "--model", model, "--effort", effort, "--tools", "",
+               "--strict-mcp-config", "--setting-sources", "", "--disable-slash-commands",
+               "--no-session-persistence", "--output-format", "json", "--system-prompt", system]
+    if schema:
+        command += ["--json-schema", json.dumps(schema)]
+    with tempfile.TemporaryDirectory() as empty:
+        done = subprocess.run(command, input=prompt, capture_output=True, text=True,
+                              env=env, cwd=empty, timeout=1800)
+    if done.returncode:
+        raise RuntimeError(f"claude -p failed: {done.stderr.strip()[:300] or done.stdout[:300]}")
+    return json.loads(done.stdout)
+
+
+class ClaudeCodeBackend(backends.Backend):
+    """A Claude model through Claude Code, text only."""
+
+    def run_text(self, system, parts, instruction, web_search, effort="high", label="working"):
+        return claude_cli(system, self._prompt(parts, instruction), self.spec.id,
+                          effort=effort).get("result") or ""
+
+    def run_structured(self, system, parts, instruction, model_cls,
+                       web_search: bool = False, effort: str = "high"):
+        reply = claude_cli(system, self._prompt(parts, instruction), self.spec.id,
+                           model_cls.model_json_schema(), effort=effort)
+        if reply.get("structured_output") is None:
+            raise RuntimeError(f"claude -p gave no structured output ({reply.get('subtype')})")
+        return model_cls.model_validate(reply["structured_output"])
+
+    def count_input_tokens(self, system, parts) -> int:
+        return 0
+
+    @staticmethod
+    def _prompt(parts, instruction: str) -> str:
+        text = "\n\n".join(p.text for p in parts if isinstance(p, TextPart))
+        return f"MANUSCRIPT\n\n{text}\n\n---\n\n{instruction}" if text else instruction
+
+
+def backend_for(name: str) -> tuple[backends.Backend, str]:
+    """`cli:MODEL` runs through Claude Code; anything else through its API."""
+    via_cli = name.startswith("cli:")
+    spec = models.resolve(name.removeprefix("cli:"))
+    backend = ClaudeCodeBackend(spec) if via_cli else backends.build(spec)
+    return backend, spec.id
+
+
+def label(name: str) -> str:
+    """A name safe for a directory: the model id, without the route."""
+    return models.resolve(name.removeprefix("cli:")).id
+
+
+# ------------------------------------------------------------- data
 
 def real_comments(slug: str) -> list[str]:
-    connection = sqlite3.connect(corpus_index.DB_PATH)
+    connection = sqlite3.connect(f"file:{corpus_index.DB_PATH}?mode=ro", uri=True, timeout=30)
     try:
         # The answer key gets the same filter as the precedents: a reply the
         # parser left in ("We have added ICP-MS data") would let a prediction
@@ -137,147 +206,23 @@ def real_comments(slug: str) -> list[str]:
         connection.close()
 
 
-def predict(slug: str, text: str, out: Path, lock: threading.Lock,
-            question: str = PREDICT) -> dict:
-    path = out / f"{slug}.predict.json"
-    if path.is_file():
-        return json.loads(path.read_text())
-
-    spec = models.resolve(PREDICTOR)
-    backend = ClaudeCodeBackend(spec) if PREDICT_CLI else backends.build(spec)
-    reviewer = Reviewer(backend, "referee", use_web_search=False)
-    manuscript = Manuscript(Path(f"{slug}.txt"), [TextPart(text[:MANUSCRIPT_CHARS])])
-
-    result: dict = {"slug": slug}
-    material = {
-        "prior": None,
-        "paper": reviewer.precedents_by_paper(manuscript, exclude=slug),
-        "part": reviewer.precedents_by_part(manuscript, exclude=slug),
-    }
-    result["parts"] = reviewer.notes.get("parts", "")
-    for arm in ARMS:
-        prompt = question.format(n=PREDICTIONS)
-        if material[arm]:
-            prompt += MATERIAL.format(material=material[arm][1])
-            result[f"{arm}_sources"] = material[arm][2]
-        answer = backend.run_structured(reviewer.system, manuscript.parts, prompt, Predictions)
-        result[arm] = answer.predictions[:PREDICTIONS]
-    result["cost"] = 0.0 if PREDICT_CLI else backend.take_usage().cost(spec)
-    result["predictor"] = spec.id
-    path.write_text(json.dumps(result, indent=1))
-    with lock:
-        print(f"  predicted {slug}  ${result['cost']:.3f}", file=sys.stderr, flush=True)
-    return result
+def received_dates(testset: Path | None) -> dict[str, dt.date]:
+    if not testset:
+        return {}
+    out = {}
+    for row in json.loads(testset.read_text()):
+        try:
+            out[row["slug"]] = dt.datetime.strptime(row["received"], "%d %B %Y").date()
+        except (KeyError, TypeError, ValueError):
+            pass
+    return out
 
 
-def judge(result: dict, out: Path, lock: threading.Lock) -> dict:
-    slug = result["slug"]
-    path = out / f"{slug}.judge.json"
-    if path.is_file():
-        return json.loads(path.read_text())
-
-    real, used = [], 0
-    for n, c in enumerate(real_comments(slug), 1):
-        line = f"R{n}. {c[:800]}"
-        if used + len(line) > 40_000:
-            break
-        real.append(line)
-        used += len(line)
-
-    pool = [(arm, p) for arm in ARMS for p in result[arm]]
-    random.Random(slug).shuffle(pool)
-    predicted = "\n".join(f"P{i}. {p}" for i, (_, p) in enumerate(pool, 1))
-
-    prompt = JUDGE_PROMPT.format(real="\n".join(real), predicted=predicted)
-    raw, stop, tokens = (_judge_cli if JUDGE_CLI else _judge_api)(prompt)
-    match = re.search(r"\{.*\}", raw, re.S)
-    hits = set(json.loads(match.group(0))["hits"]) if match else set()
-
-    scored = {arm: 0 for arm in ARMS}
-    for i, (arm, _) in enumerate(pool, 1):
-        if f"P{i}" in hits:
-            scored[arm] += 1
-    if not match:
-        raise ValueError(f"judge gave no JSON (stop: {stop})")
-    verdict = {"slug": slug, "hits": scored, "hit_ids": sorted(hits),
-               "pool": [arm for arm, _ in pool],
-               "judge_tokens": tokens}
-    path.write_text(json.dumps(verdict, indent=1))
-    with lock:
-        print(f"  judged {slug}  {scored}", file=sys.stderr, flush=True)
-    return verdict
-
-
-def _judge_api(prompt: str) -> tuple[str, str, list[int]]:
-    import anthropic
-
-    with anthropic.Anthropic().messages.stream(
-        model=JUDGE,
-        max_tokens=4000,
-        thinking={"type": "between_tools"},
-        messages=[{"role": "user", "content": prompt}],
-    ) as stream:
-        reply = stream.get_final_message()
-    # The reply may open with a thinking block; the answer is in the text.
-    raw = "".join(b.text for b in reply.content if b.type == "text")
-    return raw, reply.stop_reason, [reply.usage.input_tokens, reply.usage.output_tokens]
-
-
-def claude_cli(system: str, prompt: str, model: str, schema: dict | None = None) -> dict:
-    """One call through Claude Code (`claude -p`), on its subscription, not the API.
-
-    The API key is kept out of the child's environment, or Claude Code would
-    bill it. No tools, MCP servers, settings, skills or saved session, and an
-    empty working directory: without these the call carries some 80,000 tokens
-    of the operator's own setup, down to the language it answers in.
-    """
-    import subprocess
-    import tempfile
-
-    env = {k: v for k, v in os.environ.items() if k not in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN")}
-    command = ["claude", "-p", "--model", model, "--effort", "low", "--tools", "",
-               "--strict-mcp-config", "--setting-sources", "", "--disable-slash-commands",
-               "--no-session-persistence", "--output-format", "json", "--system-prompt", system]
-    if schema:
-        command += ["--json-schema", json.dumps(schema)]
-    with tempfile.TemporaryDirectory() as empty:
-        done = subprocess.run(command, input=prompt, capture_output=True, text=True,
-                              env=env, cwd=empty, timeout=1800)
-    if done.returncode:
-        raise RuntimeError(f"claude -p failed: {done.stderr.strip()[:300] or done.stdout[:300]}")
-    return json.loads(done.stdout)
-
-
-def _judge_cli(prompt: str) -> tuple[str, str, list[int]]:
-    reply = claude_cli("You mark predictions against an answer key and reply with JSON only.",
-                       prompt, JUDGE)
-    usage = reply.get("usage") or {}
-    return (reply.get("result") or "", reply.get("subtype", ""),
-            [usage.get("input_tokens", 0) + usage.get("cache_creation_input_tokens", 0)
-             + usage.get("cache_read_input_tokens", 0), usage.get("output_tokens", 0)])
-
-
-class ClaudeCodeBackend(backends.Backend):
-    """The predictor through Claude Code, text only, for --cli runs."""
-
-    def run_text(self, system, parts, instruction, web_search, effort="high", label="working"):
-        return claude_cli(system, self._prompt(parts, instruction), self.spec.id).get("result") or ""
-
-    def run_structured(self, system, parts, instruction, model_cls,
-                       web_search: bool = False, effort: str = "high"):
-        reply = claude_cli(system, self._prompt(parts, instruction), self.spec.id,
-                           model_cls.model_json_schema())
-        if reply.get("structured_output") is None:
-            raise RuntimeError(f"claude -p gave no structured output ({reply.get('subtype')})")
-        return model_cls.model_validate(reply["structured_output"])
-
-    def count_input_tokens(self, system, parts) -> int:
-        return 0
-
-    @staticmethod
-    def _prompt(parts, instruction: str) -> str:
-        text = "\n\n".join(p.text for p in parts if isinstance(p, TextPart))
-        return f"MANUSCRIPT\n\n{text}\n\n---\n\n{instruction}"
+def visible_before(received: dt.date, published: dict[str, str]) -> set[str]:
+    """Papers out before this manuscript was received. Undated ones are left
+    out: a precedent of unknown date might be from the future."""
+    cut = received.isoformat()
+    return {slug for slug, day in published.items() if day and day < cut}
 
 
 def manuscript_file(folder: Path, slug: str) -> Path | None:
@@ -296,6 +241,115 @@ def read_manuscript(path: Path) -> str:
         return "\n\n".join(page.get_text() for page in document)
 
 
+def provenance() -> dict:
+    try:
+        commit = subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True,
+                                text=True, cwd=Path(__file__).parent).stdout.strip()
+    except OSError:
+        commit = ""
+    return {"commit": commit, "index": corpus_sync.current() or str(corpus_index.INDEX_DIR),
+            "db": str(corpus_index.DB_PATH), "manuscript_chars": MANUSCRIPT_CHARS,
+            "predictions": PREDICTIONS}
+
+
+# ------------------------------------------------------------- stages
+
+def predict(slug: str, text: str, predictor: str, out: Path, question: str,
+            visible: "set[str] | None", lock: threading.Lock) -> dict:
+    path = out / "predict" / label(predictor) / f"{slug}.json"
+    if path.is_file():
+        return json.loads(path.read_text())
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    backend, model_id = backend_for(predictor)
+    reviewer = Reviewer(backend, "referee", use_web_search=False)
+    body = text[:MANUSCRIPT_CHARS]
+    manuscript = Manuscript(Path(f"{slug}.txt"), [TextPart(body)])
+
+    with corpus_index.restricted_to(visible):
+        material = {
+            "prior": None,
+            "paper": reviewer.precedents_by_paper(manuscript, exclude=slug),
+            "part": reviewer.precedents_by_part(manuscript, exclude=slug),
+        }
+    result: dict = {
+        "slug": slug, "predictor": predictor, "model": model_id, "effort": PREDICT_EFFORT,
+        "manuscript_sha256": hashlib.sha256(body.encode()).hexdigest(),
+        "visible_papers": None if visible is None else len(visible),
+        "parts": reviewer.notes.get("parts", ""), **provenance(),
+    }
+    for arm in ARMS:
+        prompt = question.format(n=PREDICTIONS)
+        if material[arm]:
+            prompt += MATERIAL.format(material=material[arm][1])
+            result[f"{arm}_sources"] = material[arm][2]
+            result[f"{arm}_material"] = material[arm][1]
+            # Checked as it is made, not at the end: a run with a leak in it is
+            # worth stopping, not finishing.
+            if slug in material[arm][2]:
+                raise RuntimeError(f"{slug} was shown its own reviews in the {arm} arm")
+            if visible is not None and not set(material[arm][2]) <= visible:
+                raise RuntimeError(f"{slug} was shown a paper from after its receipt")
+        result[f"{arm}_prompt_sha256"] = hashlib.sha256(prompt.encode()).hexdigest()
+        answer = backend.run_structured(reviewer.system, manuscript.parts, prompt, Predictions,
+                                        effort=PREDICT_EFFORT)
+        result[arm] = answer.predictions[:PREDICTIONS]
+        if len(result[arm]) < PREDICTIONS:
+            raise RuntimeError(f"{slug}: {arm} gave {len(result[arm])} predictions")
+    result["cost"] = 0.0 if isinstance(backend, ClaudeCodeBackend) \
+        else backend.take_usage().cost(backend.spec)
+    path.write_text(json.dumps(result, indent=1))
+    with lock:
+        print(f"  predicted {slug} with {model_id}  ${result['cost']:.3f}", file=sys.stderr, flush=True)
+    return result
+
+
+def judge(slug: str, predicted: list[dict], judge_name: str, out: Path,
+          lock: threading.Lock) -> dict:
+    """Mark every prediction for this manuscript, all predictors and arms in one
+    shuffled list, so the judge cannot tell which came from where."""
+    path = out / "judge" / label(judge_name) / f"{slug}.json"
+    if path.is_file():
+        saved = json.loads(path.read_text())
+        if saved.get("predictors") == sorted(p["predictor"] for p in predicted):
+            return saved
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    real, used = [], 0
+    for n, c in enumerate(real_comments(slug), 1):
+        line = f"R{n}. {c[:800]}"
+        if used + len(line) > 40_000:
+            break
+        real.append(line)
+        used += len(line)
+    if not real:
+        raise RuntimeError(f"{slug} has no first-round referee points to judge against")
+
+    pool = [(p["predictor"], arm, text) for p in predicted for arm in ARMS for text in p[arm]]
+    random.Random(slug).shuffle(pool)
+    listed = "\n".join(f"P{i}. {text}" for i, (_, _, text) in enumerate(pool, 1))
+    prompt = JUDGE_PROMPT.format(real="\n".join(real), predicted=listed)
+
+    backend, model_id = backend_for(judge_name)
+    answer = backend.run_structured(JUDGE_SYSTEM, [], prompt, Hits, effort=JUDGE_EFFORT)
+    hit_ids = set(answer.hits)
+    scored: dict[str, dict[str, int]] = {}
+    for i, (who, arm, _) in enumerate(pool, 1):
+        scored.setdefault(who, {a: 0 for a in ARMS})
+        if f"P{i}" in hit_ids:
+            scored[who][arm] += 1
+    verdict = {"slug": slug, "judge": judge_name, "model": model_id,
+               "predictors": sorted(p["predictor"] for p in predicted),
+               "hits": scored, "hit_ids": sorted(hit_ids),
+               "pool": [[who, arm] for who, arm, _ in pool], "real_comments": len(real)}
+    path.write_text(json.dumps(verdict, indent=1))
+    with lock:
+        print(f"  judged {slug} by {model_id}  {scored}", file=sys.stderr, flush=True)
+    return verdict
+
+
+# ------------------------------------------------------------- summary
+
 def sign_test(wins: int, losses: int) -> float:
     """Two-sided exact sign test, ties dropped."""
     n = wins + losses
@@ -305,72 +359,112 @@ def sign_test(wins: int, losses: int) -> float:
     return min(1.0, 2 * tail)
 
 
-def summarise(verdicts: list[dict]) -> str:
-    if not verdicts:
-        return "No paper finished."
-    lines = [f"{len(verdicts)} papers, {PREDICTIONS} predictions per arm\n"]
-    for arm in ARMS:
-        mean = sum(v["hits"][arm] for v in verdicts) / len(verdicts)
-        lines.append(f"  {arm:6} mean hits {mean:.2f} / {PREDICTIONS}")
-    for a, b in (("part", "paper"), ("part", "prior"), ("paper", "prior")):
-        wins = sum(v["hits"][a] > v["hits"][b] for v in verdicts)
-        losses = sum(v["hits"][a] < v["hits"][b] for v in verdicts)
-        ties = len(verdicts) - wins - losses
-        lines.append(f"  {a} vs {b}: {wins} won, {losses} lost, {ties} tied, "
-                     f"sign test p={sign_test(wins, losses):.3f}")
-    return "\n".join(lines)
+def paired(a: list[float], b: list[float]) -> str:
+    diffs = [x - y for x, y in zip(a, b)]
+    n = len(diffs)
+    mean = statistics.mean(diffs)
+    half = 1.96 * statistics.stdev(diffs) / sqrt(n) if n > 1 else float("nan")
+    wins, losses = sum(d > 0 for d in diffs), sum(d < 0 for d in diffs)
+    return (f"{mean:+.2f} a paper (95% CI {mean - half:+.2f} to {mean + half:+.2f}); "
+            f"{wins} won, {losses} lost, {n - wins - losses} tied, sign test p={sign_test(wins, losses):.3f}")
 
+
+def summarise(verdicts: list[dict], subsets: dict[str, set[str]]) -> str:
+    lines = []
+    for judge_name in sorted({v["judge"] for v in verdicts}):
+        for name, members in subsets.items():
+            mine = [v for v in verdicts if v["judge"] == judge_name and v["slug"] in members]
+            if not mine:
+                continue
+            predictors = sorted({p for v in mine for p in v["hits"]})
+            lines.append(f"\n== judge {judge_name} · {name}: {len(mine)} manuscripts, "
+                         f"{PREDICTIONS} predictions per arm ==")
+            for p in predictors:
+                for arm in ARMS:
+                    mean = statistics.mean(v["hits"][p][arm] for v in mine)
+                    lines.append(f"  {p:28} {arm:6} mean hits {mean:.2f}")
+            for p in predictors:
+                for a, b in (("part", "prior"), ("paper", "prior"), ("part", "paper")):
+                    lines.append(f"  {p}: {a} vs {b}: " + paired(
+                        [v["hits"][p][a] for v in mine], [v["hits"][p][b] for v in mine]))
+            for i, p in enumerate(predictors):
+                for q in predictors[i + 1:]:
+                    for arm in ARMS:
+                        lines.append(f"  {arm}: {p} vs {q}: " + paired(
+                            [v["hits"][p][arm] for v in mine], [v["hits"][q][arm] for v in mine]))
+    return "\n".join(lines) if lines else "No manuscript finished."
+
+
+# ------------------------------------------------------------- main
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("fulltext", type=Path)
     parser.add_argument("out", type=Path)
+    parser.add_argument("--slugs", type=Path, required=True, help="Test slugs, one per line.")
     parser.add_argument("--limit", type=int, default=0)
     parser.add_argument("--workers", type=int, default=4)
-    parser.add_argument("--slugs", type=Path,
-                        help="File of test slugs, one per line, instead of the papers "
-                             "missing from the index.")
     parser.add_argument("--submitted", action="store_true",
                         help="The manuscripts are as submitted, not as published.")
     parser.add_argument("--db", type=Path,
                         help="Read this copy of the corpus database instead. A harvest "
                              "writing to the live one locks out readers.")
-    parser.add_argument("--judge-cli", action="store_true",
-                        help="Judge through Claude Code on its subscription, not the API.")
-    parser.add_argument("--predictor-cli", metavar="MODEL",
-                        help="Predict with this model through Claude Code, e.g. sonnet.")
+    parser.add_argument("--testset", type=Path, help="testset.json, for each received date.")
+    parser.add_argument("--dates", type=Path,
+                        help="Publication date of every corpus paper (JSON slug → date). "
+                             "With --testset, precedents come only from earlier papers.")
+    parser.add_argument("--predictors", default="luna",
+                        help="Comma-separated; cli:MODEL runs through Claude Code.")
+    parser.add_argument("--judges", default="cli:claude-sonnet-5-5",
+                        help="Comma-separated; every judge marks every predictor's predictions.")
+    parser.add_argument("--subset", action="append", default=[], metavar="NAME=FILE",
+                        help="Also report on the slugs in FILE, e.g. stamped=stamped.slugs.")
     args = parser.parse_args(argv)
-    global JUDGE_CLI, PREDICT_CLI, PREDICTOR
-    JUDGE_CLI = args.judge_cli
-    if args.predictor_cli:
-        PREDICT_CLI, PREDICTOR = True, args.predictor_cli
     if args.db:
         corpus_index.DB_PATH = args.db
+    if args.dates and not args.testset:
+        parser.error("--dates needs --testset for the received dates")
 
     config.load()
     args.out.mkdir(parents=True, exist_ok=True)
-    wanted = args.slugs.read_text().split() if args.slugs else held_out()
+    wanted = args.slugs.read_text().split()
     slugs = [s for s in wanted if manuscript_file(args.fulltext, s)]
     if args.limit:
         slugs = slugs[: args.limit]
     question = PREDICT_SUBMITTED if args.submitted else PREDICT
-    print(f"{len(slugs)} test papers with a manuscript", file=sys.stderr)
+    predictors = [p for p in args.predictors.split(",") if p]
+    judges = [j for j in args.judges.split(",") if j]
+    received = received_dates(args.testset)
+    published = json.loads(args.dates.read_text()) if args.dates else None
+    print(f"{len(slugs)} manuscripts · predictors {predictors} · judges {judges} · "
+          f"{'precedents before receipt' if published else 'no date cut'}", file=sys.stderr)
+    (args.out / "run.json").write_text(json.dumps({**vars(args), **provenance()}, default=str, indent=1))
 
     lock = threading.Lock()
 
-    def one(slug: str) -> dict | None:
+    def one(slug: str) -> list[dict]:
         try:
+            visible = None
+            if published is not None:
+                if slug not in received:
+                    raise RuntimeError("no received date")
+                visible = visible_before(received[slug], published)
             text = read_manuscript(manuscript_file(args.fulltext, slug))
-            return judge(predict(slug, text, args.out, lock, question), args.out, lock)
-        except Exception as exc:  # one bad paper should not sink the run
+            made = [predict(slug, text, p, args.out, question, visible, lock) for p in predictors]
+            return [judge(slug, made, j, args.out, lock) for j in judges]
+        except Exception as exc:  # one bad manuscript should not sink the run
             with lock:
                 print(f"  {slug} failed: {type(exc).__name__}: {exc}", file=sys.stderr, flush=True)
-            return None
+            return []
 
     with ThreadPoolExecutor(max_workers=args.workers) as pool:
-        verdicts = [v for v in pool.map(one, slugs) if v]
+        verdicts = [v for vs in pool.map(one, slugs) for v in vs]
 
-    summary = summarise(verdicts)
+    subsets = {"all": set(slugs)}
+    for spec in args.subset:
+        name, file = spec.split("=", 1)
+        subsets[name] = set(Path(file).read_text().split())
+    summary = summarise(verdicts, subsets)
     (args.out / "summary.txt").write_text(summary + "\n")
     print(summary)
     return 0
