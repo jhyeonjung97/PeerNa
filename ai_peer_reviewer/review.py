@@ -110,6 +110,19 @@ LATER_STAGES = (
 )
 
 
+#: The order lenses start in, which is not the order they are reported in. The
+#: literature lens searches the web and is the slowest; started last it was the
+#: one everything else waited for, so it takes the second slot from the start.
+#: The claims lens keeps the first: it is text only, and its finishing is what
+#: lets the precedent pass start on a warm cache.
+START_ORDER = ("claims", "literature", "methods", "figures")
+
+
+def _start_order(review_pass) -> int:
+    key = review_pass.key
+    return START_ORDER.index(key) if key in START_ORDER else len(START_ORDER)
+
+
 def total_steps() -> int:
     return len(PASSES) + len(LATER_STAGES)
 
@@ -669,7 +682,7 @@ class Reviewer:
                 ThreadPoolExecutor(max_workers=CONCURRENCY) as pool:
             checking = side.submit(consistency)
             looking = side.submit(precedents)
-            jobs = [pool.submit(one, p) for p in PASSES]
+            jobs = [pool.submit(one, p) for p in sorted(PASSES, key=_start_order)]
             for future in jobs:
                 future.result()  # re-raises whatever a pass raised
             looking.result()
