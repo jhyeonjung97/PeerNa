@@ -24,7 +24,7 @@ from ai_peer_reviewer.corpus_sync import DEFAULT_REPO, FILES
 from ai_peer_reviewer.embed_index import since_clause
 
 
-def slim_database(target: Path, source: Path = DB_PATH, since: int = 0) -> None:
+def slim_database(target: Path, source: Path | None = None, since: int = 0) -> None:
     """Copy papers and comments without the review files.
 
     Comments are copied with their rowids, which the comment vectors point at;
@@ -39,7 +39,7 @@ def slim_database(target: Path, source: Path = DB_PATH, since: int = 0) -> None:
                                kind TEXT DEFAULT 'point', round INTEGER DEFAULT 1);
         """
     )
-    out.execute("ATTACH DATABASE ? AS source", (str(source),))
+    out.execute("ATTACH DATABASE ? AS source", (str(source or DB_PATH),))
     # The same cut as the index (embed_index --since), so the database carries
     # nothing the vectors cannot reach.
     where = " WHERE 1" + since_clause(since)
@@ -65,7 +65,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--repo", default=DEFAULT_REPO)
     parser.add_argument("--since", type=int, default=0,
                         help="Keep papers from this year on, as the index was built.")
-    parser.add_argument("--db", type=Path, default=DB_PATH,
+    parser.add_argument("--db", type=Path,
                         help="Read this copy of the database; a running harvest locks the live one.")
     args = parser.parse_args(argv)
 
