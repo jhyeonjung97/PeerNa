@@ -625,6 +625,9 @@ class Handler(BaseHTTPRequestHandler):
                     # each is running.
                     "commit": (os.environ.get("RENDER_GIT_COMMIT") or "")[:7] or None,
                     "models": reviews,
+                    # The corpus release in place, or None while it is fetched
+                    # or if none is configured.
+                    "corpus": corpus_sync.current() or None,
                     "running": sum(
                         1 for job in JOBS.values() if job.get("status") == "running"
                     ),
