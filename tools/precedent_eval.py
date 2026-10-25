@@ -299,11 +299,20 @@ def predict(slug: str, text: str, predictor: str, out: Path, question: str,
             if visible is not None and not set(material[arm][2]) <= visible:
                 raise RuntimeError(f"{slug} was shown a paper from after its receipt")
         result[f"{arm}_prompt_sha256"] = hashlib.sha256(prompt.encode()).hexdigest()
-        answer = backend.run_structured(reviewer.system, manuscript.parts, prompt, Predictions,
-                                        effort=PREDICT_EFFORT)
+        # A short list or a reply that runs away and breaks off (Luna once
+        # repeated a tab until the output ran out) is retried, not fatal.
+        for attempt in range(3):
+            try:
+                answer = backend.run_structured(reviewer.system, manuscript.parts, prompt,
+                                                Predictions, effort=PREDICT_EFFORT)
+                if len(answer.predictions) >= PREDICTIONS:
+                    break
+                problem = f"gave {len(answer.predictions)} predictions"
+            except Exception as exc:  # malformed output from the model
+                problem = f"{type(exc).__name__}: {str(exc)[:120]}"
+        else:
+            raise RuntimeError(f"{slug}: {arm} {problem} three times")
         result[arm] = answer.predictions[:PREDICTIONS]
-        if len(result[arm]) < PREDICTIONS:
-            raise RuntimeError(f"{slug}: {arm} gave {len(result[arm])} predictions")
     result["cost"] = 0.0 if isinstance(backend, ClaudeCodeBackend) \
         else backend.take_usage().cost(backend.spec)
     path.write_text(json.dumps(result, indent=1))
