@@ -151,7 +151,13 @@ def claude_cli(system: str, prompt: str, model: str, schema: dict | None = None,
         done = subprocess.run(command, input=prompt, capture_output=True, text=True,
                               env=env, cwd=empty, timeout=1800)
     if done.returncode:
-        raise RuntimeError(f"claude -p failed: {done.stderr.strip()[:300] or done.stdout[:300]}")
+        # The reason ("You've hit your limit …") is in the JSON's result field,
+        # past where a cut of the raw output would end.
+        try:
+            reason = json.loads(done.stdout).get("result") or done.stdout
+        except ValueError:
+            reason = done.stderr.strip() or done.stdout
+        raise RuntimeError(f"claude -p failed: {str(reason)[:300]}")
     return json.loads(done.stdout)
 
 
