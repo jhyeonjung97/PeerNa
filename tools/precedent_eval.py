@@ -52,6 +52,11 @@ from concurrent.futures import ThreadPoolExecutor
 from math import comb, sqrt
 from pathlib import Path
 
+# Before numpy loads: OpenBLAS's own worker threads deadlock a fork() made
+# while they are up (its atfork handler joins them), and every Claude Code
+# call forks. The run hung twice that way, all threads parked, no child.
+os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+
 from pydantic import BaseModel, Field
 
 from ai_peer_reviewer import backends, config, corpus_index, corpus_sync, models
