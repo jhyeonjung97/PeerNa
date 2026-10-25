@@ -127,6 +127,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--model", default="claude-haiku-5-5")
     parser.add_argument("--effort", default="medium")
     parser.add_argument("--workers", type=int, default=4)
+    parser.add_argument("--workers-file", type=Path,
+                        help="A file holding the number of papers to run at once, read every "
+                             "few seconds, so the rate can change without a restart.")
     parser.add_argument("--limit", type=int, default=0)
     parser.add_argument("--load", action="store_true",
                         help="Write what has been extracted into the database and stop.")
@@ -169,8 +172,42 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"  {n}/{len(todo)} ({count[1]} failed), ~{rate * (len(todo) - n) / 3600:.1f} h left",
                       file=sys.stderr, flush=True)
 
-    with ThreadPoolExecutor(args.workers) as pool:
-        list(pool.map(one, todo))
+    # A gate in front of a large pool: the pool never limits, the gate does,
+    # and the gate's size follows --workers-file when there is one.
+    wanted = [args.workers]
+    active = [0]
+    gate = threading.Condition()
+
+    def watch() -> None:
+        while True:
+            try:
+                n = int(args.workers_file.read_text().strip())
+                if n > 0 and n != wanted[0]:
+                    with gate:
+                        wanted[0] = n
+                        gate.notify_all()
+                    print(f"  now {n} at once", file=sys.stderr, flush=True)
+            except (OSError, ValueError):
+                pass
+            time.sleep(10)
+
+    if args.workers_file:
+        threading.Thread(target=watch, daemon=True).start()
+
+    def gated(slug: str) -> None:
+        with gate:
+            while active[0] >= wanted[0]:
+                gate.wait(5)
+            active[0] += 1
+        try:
+            one(slug)
+        finally:
+            with gate:
+                active[0] -= 1
+                gate.notify_all()
+
+    with ThreadPoolExecutor(64) as pool:
+        list(pool.map(gated, todo))
     print(f"DONE {count[0]} extracted, {count[1]} failed", file=sys.stderr)
     return 0
 
