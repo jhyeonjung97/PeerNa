@@ -29,7 +29,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 
 from ai_peer_reviewer.embed_index import since_clause
-from tools.precedent_eval import claude_cli
+from tools.precedent_eval import backend_for, claude_cli
 
 INSTRUCTION = """\
 Below is the peer review file of a published paper: the referees' reports and
@@ -68,7 +68,18 @@ class Extracted(BaseModel):
 LIMIT_WAIT = 600
 
 
+def extract_api(text: str, model: str, effort: str) -> dict:
+    """The same reading through a provider's API, for the few papers Claude
+    declines: a review file on pathogens can trip its biology filter."""
+    backend, _ = backend_for(model)
+    answer = backend.run_structured("You extract referee comments from peer review files.",
+                                    [], INSTRUCTION.format(text=text), Extracted, effort=effort)
+    return answer.model_dump()
+
+
 def extract(slug: str, text: str, model: str, effort: str) -> dict:
+    if not model.startswith("claude"):
+        return extract_api(text, model, effort)
     for attempt in range(100):
         try:
             reply = claude_cli("You extract referee comments from peer review files.",
@@ -131,6 +142,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="A file holding the number of papers to run at once, read every "
                              "few seconds, so the rate can change without a restart.")
     parser.add_argument("--limit", type=int, default=0)
+    parser.add_argument("--slugs", type=Path,
+                        help="Only these papers, one slug per line.")
     parser.add_argument("--load", action="store_true",
                         help="Write what has been extracted into the database and stop.")
     args = parser.parse_args(argv)
@@ -143,6 +156,12 @@ def main(argv: list[str] | None = None) -> int:
     slugs = [s for (s,) in connection.execute(
         "SELECT slug FROM review_text WHERE 1" + since_clause(args.since) + " ORDER BY slug DESC")]
     connection.close()
+    if args.slugs:
+        wanted = set(args.slugs.read_text().split())
+        slugs = [s for s in slugs if s in wanted]
+    if not args.model.startswith("claude"):
+        from ai_peer_reviewer import config
+        config.load()
     todo = [s for s in slugs if not (args.out / f"{s}.json").is_file()]
     if args.limit:
         todo = todo[: args.limit]
