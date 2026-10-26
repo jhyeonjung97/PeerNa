@@ -50,13 +50,19 @@ def reparse() -> tuple[int, int]:
     The comments table is what an older parser made of `review_text`; the
     parser has improved since, and re-parsing costs nothing where re-fetching
     takes a night. Papers whose file now yields nothing keep their old comments
-    rather than vanish. Returns (papers re-parsed, comments now stored).
+    rather than vanish, and papers a model has read are left alone. Returns (papers re-parsed, comments now stored).
     """
     connection = sqlite3.connect(DB_PATH)
     schema(connection)
     rows = connection.execute("SELECT slug, text FROM review_text").fetchall()
+    # A paper a model has read keeps the model's comments.
+    read = set()
+    if connection.execute("SELECT 1 FROM sqlite_master WHERE name = 'comments_model'").fetchone():
+        read = {s for (s,) in connection.execute("SELECT DISTINCT slug FROM comments_model")}
     redone = 0
     for slug, text in rows:
+        if slug in read:
+            continue
         parsed = parse_review(text or "")
         if not parsed:
             continue

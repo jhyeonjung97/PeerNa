@@ -184,6 +184,28 @@ def store_comments(connection: sqlite3.Connection, slug: str, parsed: list[Parse
     )
 
 
+def adopt_model_comments(connection: sqlite3.Connection) -> int:
+    """Put the model's reading of each paper (comments_model, written by
+    tools/extract_comments.py) in place of the parser's, where there is one.
+
+    Everything downstream reads `comments`, so this is the one switch. The
+    parser's comments stay for papers the model did not read or found nothing
+    in. Returns the number of papers switched.
+    """
+    if not connection.execute(
+            "SELECT 1 FROM sqlite_master WHERE name = 'comments_model'").fetchone():
+        return 0
+    slugs = [s for (s,) in connection.execute("SELECT DISTINCT slug FROM comments_model")]
+    for slug in slugs:
+        connection.execute("DELETE FROM comments WHERE slug = ?", (slug,))
+        connection.execute(
+            "INSERT INTO comments (slug, reviewer, position, text, kind, round) "
+            "SELECT slug, reviewer, position, text, kind, round FROM comments_model "
+            "WHERE slug = ? ORDER BY reviewer, round, position", (slug,))
+    connection.commit()
+    return len(slugs)
+
+
 def _paragraphs(text: str) -> list[str]:
     """Split extracted PDF text back into paragraphs.
 

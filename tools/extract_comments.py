@@ -12,7 +12,8 @@ points, the authors' text left out.
 Writes OUT/<slug>.json, one per paper, so a stopped run resumes. When the
 subscription's limit is reached it waits and carries on rather than failing
 the rest. `--load` then writes the results into the database's comments_model
-table, beside the parser's comments, which are kept.
+table and puts them in place of the parser's comments for those papers; the
+parser's stay for the papers the model did not read.
 """
 
 from __future__ import annotations
@@ -28,6 +29,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
+from ai_peer_reviewer.corpus_index import adopt_model_comments
 from ai_peer_reviewer.embed_index import since_clause
 from tools.precedent_eval import backend_for, claude_cli
 
@@ -126,8 +128,10 @@ def load(out: Path, db: Path) -> None:
         connection.executemany("INSERT INTO comments_model VALUES (?, ?, ?, ?, ?, ?)", rows)
     connection.commit()
     total = connection.execute("SELECT kind, count(*) FROM comments_model GROUP BY kind").fetchall()
+    switched = adopt_model_comments(connection)
     connection.close()
-    print(f"Loaded {len(files)} papers: {dict(total)}", file=sys.stderr)
+    print(f"Loaded {len(files)} papers: {dict(total)}; {switched} now use them in comments",
+          file=sys.stderr)
 
 
 def main(argv: list[str] | None = None) -> int:
