@@ -104,14 +104,22 @@ def rebuild(progress=None, since: int = 0) -> int:
     return len(slugs)
 
 
-def rebuild_comments(progress=None, since: int = 0) -> int:
+def rebuild_comments(progress=None, since: int = 0, workers: int = 4) -> int:
     """One vector per referee comment, for finding precedents part by part.
 
     Reference-list entries and the authors' replies are left out here though
     they stay in the database: both are numbered like comments and survive
     parsing, and in a search by method they surface as precedents that no
     referee wrote. See `is_referee_comment`.
+
+    The vectors go straight into a file on disk as they arrive, with a note of
+    which batches are done, so a stopped run carries on where it was. Held in
+    memory as Python lists, 1.3 million of them outgrew an 8 GB machine and the
+    run was killed after five hours, at the save, with nothing kept.
     """
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
     import numpy as np
 
     INDEX_DIR.mkdir(parents=True, exist_ok=True)
@@ -128,20 +136,53 @@ def rebuild_comments(progress=None, since: int = 0) -> int:
     if not rows:
         return 0
 
-    vectors = []
-    for start in range(0, len(rows), BATCH):
-        chunk = [r[2] for r in rows[start:start + BATCH]]
-        vectors.extend(embed(chunk, dimensions=COMMENT_DIMENSIONS))
-        if progress:
-            progress(min(start + BATCH, len(rows)), len(rows))
+    total = len(rows)
+    partial = COMMENT_VECTORS_PATH.with_name("comment_vectors.partial.npy")
+    state_path = COMMENT_VECTORS_PATH.with_name("comment_vectors.partial.json")
+    # A partial run is only resumed for the same rows in the same order.
+    key = {"total": total, "first": rows[0][0], "last": rows[-1][0], "since": since,
+           "batch": BATCH, "dimensions": COMMENT_DIMENSIONS}
+    done: set[int] = set()
+    if partial.exists() and state_path.exists():
+        state = json.loads(state_path.read_text())
+        if state.get("key") == key:
+            done = set(state["done"])
+    array = np.lib.format.open_memmap(
+        partial, mode="r+" if done else "w+", dtype="float16",
+        shape=(total, COMMENT_DIMENSIONS))
+    lock = threading.Lock()
 
-    array = np.array(vectors, dtype="float32")
-    array /= np.linalg.norm(array, axis=1, keepdims=True)
-    np.save(COMMENT_VECTORS_PATH, array.astype("float16"))
+    def save_state() -> None:
+        array.flush()
+        state_path.write_text(json.dumps({"key": key, "done": sorted(done)}))
+
+    def one(start: int) -> None:
+        chunk = [r[2] for r in rows[start:start + BATCH]]
+        vectors = np.array(embed(chunk, dimensions=COMMENT_DIMENSIONS), dtype="float32")
+        # Stored unit-length, as the paper vectors are.
+        vectors /= np.linalg.norm(vectors, axis=1, keepdims=True)
+        array[start:start + len(chunk)] = vectors.astype("float16")
+        with lock:
+            done.add(start)
+            if len(done) % 20 == 0:
+                save_state()
+            if progress:
+                progress(min(len(done) * BATCH, total), total)
+
+    todo = [start for start in range(0, total, BATCH) if start not in done]
+    try:
+        with ThreadPoolExecutor(workers) as pool:
+            list(pool.map(one, todo))
+    finally:
+        save_state()
+    del array
+
+    partial.replace(COMMENT_VECTORS_PATH)
     COMMENT_IDS_PATH.write_text(json.dumps(
         {"rowid": [r[0] for r in rows], "slug": [r[1] for r in rows]}
     ))
-    return len(rows)
+    state_path.unlink(missing_ok=True)
+    return total
 
 
 def main(argv: list[str] | None = None) -> int:
