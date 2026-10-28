@@ -964,3 +964,37 @@ a prediction one sentence, and the judge asks for the same object and the same
 request, so form may count against the referees. Only precision was measured,
 not how much of the others' points each covers. And the judge is Sonnet, which
 may favour Sonnet's phrasing; a Luna judge would check that.
+
+## The precedents held few of the answers
+
+`tools/precedent_answers.py`, 2026-10-27, output in
+`~/PeerNa-data/runs/precedent-answers-2026-10-27/`. For the 78 papers of the
+clean test, each first-round referee point (27.2 a paper) was marked covered or
+not by four references: the precedent comments Sonnet was given paper by paper
+and part by part, exactly as it saw them, and its own twelve predictions without
+precedents and with the part-by-part ones.
+
+| reference | items | referee points covered |
+|---|---|---|
+| precedents, nearest papers | 74 comments | 1.74 (6.6%) |
+| precedents, part by part | 78 comments | 2.27 (9.6%) |
+| Sonnet, no precedents | 12 predictions | 8.68 (35.2%) |
+| Sonnet, part-by-part precedents | 12 predictions | 8.24 (32.5%) |
+
+Seventy-odd retrieved comments held a quarter of what twelve predictions from
+the manuscript alone did; for 26 papers the nearest-paper comments held none of
+the points, for 18 the part-by-part ones. The points the precedents held and the
+prediction without them missed came to 1.77 a paper, the most precedents could
+have added; the prediction made with them took up 0.33 of those. With them it
+covered 0.44 fewer points (95% CI −1.03 to +0.16, p = 0.08), as if the material
+pulled attention from what the model would have said.
+
+So the search is the main reason precedents did nothing, and the use of what it
+found the lesser one. On one paper read by hand (a C. difficile surveillance
+network), the comments were on hospital transmission and sentinel surveillance,
+from COVID wastewater and carbapenemase studies, and none asked what its referees
+asked: why hospital groups rather than hospitals, why a 182-day window.
+
+Next: the ceiling. Search the comment index with the referee points themselves
+as queries; if even that finds few, the corpus holds few such precedents and the
+search is not worth redesigning.
