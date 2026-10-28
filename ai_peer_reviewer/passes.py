@@ -130,6 +130,36 @@ and do not guess at their contents.
 Write your findings as prose, organised by figure.""",
     ),
     Pass(
+        key="choices",
+        needs_figures=False,
+        title="Choices, scope, and terms",
+        instruction="""\
+Ask of every choice the conclusions depend on: why this one, and would another
+reasonable one change the answer?
+
+Choices. Methods and models, parameters, thresholds and cutoffs, time windows,
+how samples, cohorts or data were selected, which covariates or input variables
+were used, how many components or clusters were kept, which baselines or
+comparators were chosen. For each that a conclusion rests on: is a reason given,
+and is it compared with a reasonable alternative or shown not to matter (a
+sensitivity analysis, an ablation)? Name only the choices where a different
+reasonable choice could plausibly change a conclusion.
+
+Scope and limitations. Set what was actually shown (which systems, samples,
+conditions, data, scale) beside what the title, abstract and conclusions claim.
+Where the claim reaches further, say how far the evidence goes. Does the paper
+state its limitations (sample size, bias, missing validation, conditions not
+tested, practical constraints) and where its findings would not hold?
+
+Terms. Find the terms the main claims rest on, the words a claim would be
+false without ("decentralised", "universal", "unbiased", "quantum spin
+liquid", "parallel"). Is each defined, used in its accepted sense, and does the
+evidence meet that definition rather than a looser one?
+
+These three come up in referee reports in every field, so they are asked of
+every paper. Write your findings as prose, specific about location.""",
+    ),
+    Pass(
         key="literature",
         title="Framing and prior work",
         instruction="""\
@@ -219,7 +249,7 @@ questions for the authors or as items to verify, never as findings.
 #: omission an author notices immediately.
 HOUSEKEEPING = """\
 Before you finish, check the things every referee checks regardless of field,
-and gather what you find into a single final comment:
+and list what you find:
 
 - Are all axes labelled, with units? Are figure panels referred to by the right
   letters in the text?
@@ -230,9 +260,11 @@ and gather what you find into a single final comment:
   text and the figures?
 - Are units, significant figures, and notation consistent throughout?
 
-This is minor by definition, so it is the last numbered comment and it is brief
-— a list of specific locations, not a paragraph of prose. If you genuinely find
-nothing, leave it out rather than writing a comment that says everything is fine.
+These are minor by definition, so they come last in the numbered list, but
+each is its own entry: one short sentence with its location ("Fig. 2c: the y-axis
+has no units."). Referees list them one by one, and an author answers them one by
+one; folded into a single paragraph they get skimmed or cut. If you genuinely
+find nothing, add nothing rather than an entry saying everything is fine.
 """
 
 MECHANICAL_INSTRUCTION = """\
@@ -328,7 +360,7 @@ Write your findings as prose, grouped by part.
 """
 
 SYNTHESIS_INSTRUCTION = """\
-Below are your notes from four separate readings of this manuscript. Write them
+Below are your notes from separate readings of this manuscript. Write them
 up as a referee report.
 
 Write it the way referees actually write, not as a structured document. The form
