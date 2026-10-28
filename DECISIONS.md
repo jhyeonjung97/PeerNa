@@ -891,3 +891,76 @@ three pages; one PDF where the redaction did not take is left out.
 
 The test set is 560 manuscripts, about 310 in the corpus's field, each kept out
 of its own precedent search.
+
+## The clean test: precedents add nothing, Sonnet beats Luna
+
+Run 2026-10-24 on the 109 Research Square manuscripts (`TODO.md` §3), stopped
+at 78 judged by Sonnet and 77 by Luna; output in
+`~/PeerNa-data/runs/precedent-clean-2026-10-24/`. Each predictor gave twelve
+predictions per arm from the manuscript as submitted; precedents came only from
+papers published before the manuscript was received; both predictors' 72
+predictions per paper were judged in one shuffled, unlabelled list against the
+first-round points (a mean of 27 a paper).
+
+Mean hits of 12:
+
+| judge | predictor | alone | nearest papers | part by part |
+|---|---|---|---|---|
+| Sonnet | Sonnet | 4.36 | 4.26 | 4.26 |
+| Sonnet | Luna | 3.01 | 3.37 | 3.18 |
+| Luna | Sonnet | 6.05 | 6.18 | 6.05 |
+| Luna | Luna | 4.90 | 4.99 | 5.13 |
+
+**The model matters.** Sonnet hits 0.9 to 1.4 more a paper than Luna in every
+arm, p < 0.001, under either judge and on the stamped subset.
+
+**Precedents do not.** Sonnet with precedents is no better than without. Luna's
++0.36 from the nearest papers (95% CI +0.04 to +0.67) under the Sonnet judge is
++0.05 under the Luna judge, so it is the judge's leniency at the margin, not the
+precedents. The Luna judge is more lenient overall, and the two agree at a
+correlation of 0.67; only what holds under both is taken as a result. This is
+the third precedent test to find nothing (20 papers in September, 121 published
+papers in October, these 78).
+
+**No sign of memorisation.** Given the title alone, Sonnet named the first author
+of 1 of the 109 test papers and Luna of none (Luna claimed to recognise 8, all
+wrongly). On 50 papers from 2020–22, inside both models' training data, Sonnet
+named 3 and Luna none, so the probe is weak, but nothing in it marks the test set
+as seen.
+
+## The human baseline: one referee predicts the others worse than Sonnet does
+
+`tools/human_baseline.py`, 2026-10-27, output in
+`~/PeerNa-data/runs/human-baseline-2026-10-27/`. For each of 77 papers with two
+or more referees, each of 212 referees was held out in turn: their first-round
+points (10.2 on average) became the predictions and the other referees' points
+(18.7) the answer key. Sonnet's and Luna's manuscript-only predictions from the
+clean test were judged in the same shuffled list, by Sonnet, against the same
+reduced key.
+
+| predictor | share of its points the other referees also made | as hits of 12 |
+|---|---|---|
+| held-out referee | 14.3% | 1.7 |
+| Sonnet | 24.6% | 3.0 |
+| Luna | 16.7% | 2.0 |
+
+Referee against Sonnet: −10.2 points (95% CI −14.4 to −6.1), Sonnet higher on
+58 papers and lower on 18, p < 0.001. Referee against Luna: −2.4 points (−6.1 to
++1.4), p = 0.06.
+
+Referees overlap little: six of every seven points one referee makes, no other
+referee on the paper makes. A model's predictions lean to the concerns several
+referees would share, so they match more often than any one referee does. Liang
+et al. (NEJM AI 2024) saw the same, 29% overlap between people against 31%
+between GPT-4 and people.
+
+What it means for the precedent test: hits against real referees is a measure
+with a low ceiling and much noise, set by how much referees disagree, and
+Sonnet's 4.4 of 12 is already past what a referee manages. There may have been
+little room for precedents to show.
+
+Three caveats. A referee's point is often a paragraph with several requests and
+a prediction one sentence, and the judge asks for the same object and the same
+request, so form may count against the referees. Only precision was measured,
+not how much of the others' points each covers. And the judge is Sonnet, which
+may favour Sonnet's phrasing; a Luna judge would check that.
