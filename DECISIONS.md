@@ -1120,3 +1120,26 @@ alternatives (named in a sentence of the methods pass, for computation only),
 and the definition of the terms a claim rests on. Line-level writing points, the
 third-largest theme, are folded into one minor housekeeping comment, and the
 cut to a referee's length is likely to drop them.
+
+## Pilot: the fifth lens on ten manuscripts
+
+`tools/design_pilot.py`, 2026-10-28, output in
+`~/PeerNa-data/runs/design-pilot-2026-10-28/`. Ten clean-test manuscripts, each
+reviewed through Claude Code (Sonnet) with the four lenses as they were and with
+the fifth lens and itemised housekeeping (94e794d), precedents and consistency
+checks off in both, figures not seen and no web search in either. Each report was
+marked against the referees' first-round points and counted by kind. Per paper:
+
+| | comments | presentation (of 5.8) | general (of 10.0) | field (of 10.5) | all |
+|---|---|---|---|---|---|
+| four lenses | 28.2 | 0.90 | 4.60 | 3.60 | 9.10 |
+| five lenses | 35.6 | 1.00 | 5.50 | 4.30 | 10.80 |
+
++1.7 points a paper (+19%), up on 6 papers, down on 1, level on 3 (sign test
+p = 0.13 with ten). The gain is in general and field points, as intended. But
+the reports are 26% longer, and points covered per comment are the same (0.32
+and 0.30), so the lens may be buying coverage with length rather than with
+aim; a length-matched comparison would separate the two. Presentation points
+barely moved although housekeeping now lists them one by one: most of them are
+about figures, which Claude Code does not see, so this pilot cannot test that
+half.
