@@ -1027,3 +1027,42 @@ it. The query is the place to start: the search embeds what a manuscript does
 referees asked, two kinds of sentence that sit apart; a query written as the
 requests a referee would make of that part (HyDE) is the same kind as the
 comments.
+
+## Tracing the ceiling back: what the matches have in common
+
+`tools/precedent_trace.py`, 2026-10-28, output in
+`~/PeerNa-data/runs/precedent-trace-2026-10-28/`. For 54 points the ceiling
+covered, on 20 papers, the three nearest comments were found again and Sonnet
+was shown the point, the test paper's parts and the candidates with their papers'
+titles and abstracts, and asked which candidate asks the same, and what the two
+papers share that makes the same request apply. 41 had a match.
+
+| common ground | matches |
+|---|---|
+| the same reporting or presentation issue | 25 |
+| the same kind of design choice or parameter | 9 |
+| the same kind of claim or inference | 7 |
+| the same method, the same kind of data | 0 |
+
+| subject distance | matches |
+|---|---|
+| different field | 21 |
+| related field | 17 |
+| same subfield | 3 |
+
+Most of what the ceiling found is not field knowledge: an unclear y-axis, numbers
+in e-notation, a central term ("parallel", "unbiased", "overshoot") left
+undefined, a passage that belongs in the supplement. The substantive matches are
+about kinds of choice and inference, again across fields: why these covariates,
+why these input variables, what "decentralised" means when part is central, a
+ground state assumed rather than compared. Only 3 of 41 came from the same
+subfield.
+
+So the search's narrowing to the 150 papers nearest in topic shuts out most of
+what it could find, and topic is the wrong axis: precedents match on the kind of
+request. A search for them would take the request as the query (HyDE), over the
+whole corpus. Whether that is worth it is another question: a quarter of the
+ceiling is presentation points a checklist or the lenses could raise without a
+corpus, and the predictions are capped at twelve, where they go to substance.
+Matching on presentation points also lifts the hit count without saying much
+about the review.
