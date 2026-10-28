@@ -106,7 +106,7 @@ def main(argv: list[str] | None = None) -> int:
     config.load()
     args.out.mkdir(parents=True, exist_ok=True)
 
-    titles = {t["slug"]: t["title"] for t in json.loads(args.testset.read_text())}
+    titles = {t["slug"]: t.get("title") or t.get("preprint_title", "") for t in json.loads(args.testset.read_text())}
     received = received_dates(args.testset)
     published = json.loads(args.dates.read_text())
     db = sqlite3.connect(f"file:{corpus_index.DB_PATH}?mode=ro", uri=True, check_same_thread=False)
