@@ -1066,3 +1066,28 @@ ceiling is presentation points a checklist or the lenses could raise without a
 corpus, and the predictions are capped at twelve, where they go to substance.
 Matching on presentation points also lifts the hit count without saying much
 about the review.
+
+## By kind of point: precedents add presentation, the model already has the field
+
+`tools/classify_points.py`, 2026-10-28, output in `~/PeerNa-data/runs/point-kinds/`.
+Haiku sorted the 2,976 first-round points of the 109 test papers into
+presentation (how it is written or shown; 26%), general substance (a request any
+referee could make: justify a choice, add a control, report statistics, state
+the novelty; 38%) and field knowledge (a specific mechanism, technique or pitfall
+of the field; 36%). The coverage runs recorded which point each reference
+covered, so they were counted again by kind without new judging. Per paper, 78
+papers:
+
+| reference | presentation (of 7.0) | general (of 10.4) | field (of 9.8) |
+|---|---|---|---|
+| Sonnet's 12 predictions, no precedents | 0.45 | 4.17 | 4.06 |
+| precedents given, part by part | 0.17 | 1.31 | 0.79 |
+| ceiling, current index | 3.96 | 4.74 | 2.62 |
+| ceiling, beyond what Sonnet predicted | 3.73 | 2.68 | 1.35 |
+
+Even a search handed the answers finds fewer of the field points (2.62) than
+Sonnet raises unprompted (4.06), and only 1.35 it does not. What the corpus
+holds that the model lacks is presentation points, then general ones, and
+neither depends on the field. Precedents retrieved per manuscript are the wrong
+vehicle for those: they are the same across fields, so they can be learnt once
+from the corpus and built into the review's own passes.
