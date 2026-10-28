@@ -1091,3 +1091,32 @@ holds that the model lacks is presentation points, then general ones, and
 neither depends on the field. Precedents retrieved per manuscript are the wrong
 vehicle for those: they are the same across fields, so they can be learnt once
 from the corpus and built into the review's own passes.
+
+## What referees ask for, across fields
+
+`tools/comment_types.py`, 2026-10-28, output in
+`~/PeerNa-data/runs/comment-types-2026-10-28/`. One indexed comment from each of
+3,000 random corpus papers (test papers left out), sorted by Haiku as in
+`classify_points`: presentation 24%, general 30%, field 46%. The 1,627
+presentation and general ones were clustered on their vectors into 40 groups and
+Sonnet named each. The clusters overlap, so they are grouped here by hand into
+eight themes, with their share of all 3,000 comments and the pass that covers
+them now:
+
+| theme | share | covered by |
+|---|---|---|
+| figures and tables: labels, legends, legibility, scale bars, panel references | 14.0% | figures pass; housekeeping |
+| missing method detail, statistics reporting, numbers that disagree | 10.3% | methods pass; consistency checks |
+| wording, typos, terminology at line level | 8.6% | housekeeping, as one minor comment |
+| claims beyond the data, missing controls or analyses | 7.4% | claims pass |
+| limitations, generality, practical scope | 4.4% | claims pass, in part ("generalised to a class") |
+| justifying a choice against alternatives (method, design, cutoff, window) | 4.3% | methods pass, one sentence ("a choice made without justification") |
+| terms central to the claims left undefined or used loosely | 2.8% | none |
+| novelty and prior work, framing of abstract and title | 2.5% | literature pass |
+
+The four passes cover the largest themes already. What they leave thin is a
+fifth of the general requests: limitations and scope, justification against
+alternatives (named in a sentence of the methods pass, for computation only),
+and the definition of the terms a claim rests on. Line-level writing points, the
+third-largest theme, are folded into one minor housekeeping comment, and the
+cut to a referee's length is likely to drop them.
