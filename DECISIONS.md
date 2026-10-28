@@ -998,3 +998,32 @@ asked: why hospital groups rather than hospitals, why a 182-day window.
 Next: the ceiling. Search the comment index with the referee points themselves
 as queries; if even that finds few, the corpus holds few such precedents and the
 search is not worth redesigning.
+
+## The ceiling: the corpus holds the precedents, the search misses them
+
+`tools/precedent_ceiling.py`, 2026-10-27, output in
+`~/PeerNa-data/runs/precedent-ceiling-old/` and `-new/`. Each referee point of
+the 78 papers was itself the query; the three nearest comments on papers
+published before the manuscript was received were kept (82 a paper), and the
+judge marked which points they covered, as in the section above.
+
+| comments | referee points covered (of 27.2) | not in Sonnet's own prediction |
+|---|---|---|
+| found by the search the test used, part by part | 2.27 | 1.77 (either search) |
+| nearest to the points, index the test used (parser) | 10.13 (36.5%) | 6.87 |
+| nearest to the points, current index (Haiku) | 11.32 (39.7%) | 7.76 |
+
+Two papers in 78 had none. Comments asking what the referees asked are in the
+corpus for more than a third of the points, four to five times what the search
+found, and most of them are points the model does not make on its own; the
+current index finds 12% more than the old. The search, not the corpus, is what
+to fix.
+
+The ceiling is generous: a query that is the answer finds paraphrases no search
+from the manuscript can, and three comments a point is a wide net. But the gap
+is large enough that a search closer in kind to the points should close part of
+it. The query is the place to start: the search embeds what a manuscript does
+("construction of a weighted inter-hospital network…") and looks for what
+referees asked, two kinds of sentence that sit apart; a query written as the
+requests a referee would make of that part (HyDE) is the same kind as the
+comments.
