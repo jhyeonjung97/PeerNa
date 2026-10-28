@@ -919,8 +919,8 @@ arm, p < 0.001, under either judge and on the stamped subset.
 +0.05 under the Luna judge, so it is the judge's leniency at the margin, not the
 precedents. The Luna judge is more lenient overall, and the two agree at a
 correlation of 0.67; only what holds under both is taken as a result. This is
-the third precedent test to find nothing (20 papers in September, 121 published
-papers in October, these 78).
+the third precedent test to find nothing (20 papers by abstract, 121 published
+papers, these 78).
 
 **No sign of memorisation.** Given the title alone, Sonnet named the first author
 of 1 of the 109 test papers and Luna of none (Luna claimed to recognise 8, all
