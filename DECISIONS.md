@@ -1061,7 +1061,7 @@ subfield.
 So the search's narrowing to the 150 papers nearest in topic shuts out most of
 what it could find, and topic is the wrong axis: precedents match on the kind of
 request. A search for them would take the request as the query (HyDE), over the
-whole corpus. Whether that is worth it is another question: a quarter of the
+whole corpus. Whether that is worth it is another question: more than half of the
 ceiling is presentation points a checklist or the lenses could raise without a
 corpus, and the predictions are capped at twelve, where they go to substance.
 Matching on presentation points also lifts the hit count without saying much
