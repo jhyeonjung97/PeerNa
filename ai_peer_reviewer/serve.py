@@ -656,6 +656,9 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/logo.svg":
             return self._serve_file(WEB_ROOT / "logo.svg")
 
+        if path == "/og.png":
+            return self._serve_file(WEB_ROOT / "og.png")
+
         if path == "/api/models":
             viewer = self._viewer()
             return self._json(
