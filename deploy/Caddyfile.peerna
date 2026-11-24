@@ -1,0 +1,7 @@
+# The PeerNa block of /etc/caddy/Caddyfile on haileylab-1 (the whole file lives in the
+# Nuvia repository, deploy/Caddyfile). Uploads are PDFs, so no request size limit here;
+# the server enforces its own.
+peerna.haileylab.com {
+	encode gzip zstd
+	reverse_proxy 127.0.0.1:8080
+}

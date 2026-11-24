@@ -1,9 +1,8 @@
 #!/bin/sh
 # Release: put what is on dev in front of everyone. Only when the operator says.
 #
-# The real service has autoDeploy off, so pushing main does not deploy it; this
-# pushes main and then asks Render to deploy, through the deploy hook if one is
-# configured, or tells you which button to press.
+# Pushing main deploys the AWS server through GitHub Actions (.github/workflows/
+# deploy-aws.yml). Render, while it still runs, is asked through its deploy hook.
 #
 # A deploy replaces the instance, and a review runs for minutes in a background
 # thread of the old one, so it dies. The checkpoint means the work is not lost,
@@ -29,7 +28,7 @@ print('  imports cleanly on 3.12')"
   find ai_peer_reviewer -name "*.cpython-312.pyc" -delete
 fi
 
-URL=${PEERNA_URL:-https://peerna.onrender.com}
+URL=${PEERNA_URL:-https://peerna.haileylab.com}
 RUNNING=$(curl -fsS -m 20 "$URL/healthz" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("running", 0))' 2>/dev/null || echo "?")
 if [ "$RUNNING" != "0" ] && [ "$RUNNING" != "?" ]; then
   echo "$RUNNING review(s) running on $URL. A release would interrupt them."
@@ -38,9 +37,10 @@ if [ "$RUNNING" != "0" ] && [ "$RUNNING" != "?" ]; then
 fi
 
 git push origin HEAD:main
+echo "main is pushed. GitHub Actions (deploy-aws) deploys it to $URL."
+# Render, while it still runs alongside: delete RENDER_DEPLOY_HOOK from the .env
+# once the AWS server has taken over.
 HOOK=$(sed -n 's/^RENDER_DEPLOY_HOOK=//p' "$HOME/.config/ai-peer-reviewer/.env" 2>/dev/null | tail -1)
 if [ -n "$HOOK" ]; then
-  curl -fsS -X POST "$HOOK" >/dev/null && echo "Release deploy started on $URL."
-else
-  echo "main is pushed. Deploy it from the Render dashboard: peerna -> Manual Deploy -> Deploy latest commit."
+  curl -fsS -X POST "$HOOK" >/dev/null && echo "Render deploy started too."
 fi
