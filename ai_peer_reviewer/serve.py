@@ -511,7 +511,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def _redirect_uri(self) -> str:
         host = self.headers.get("Host") or "localhost"
-        # Render terminates TLS in front of the container, so the request that
+        # Render or Caddy terminates TLS in front of the server, so the request that
         # arrives here is plain HTTP while the address the browser used is not.
         # Google matches the redirect exactly, so it has to be the outside one.
         scheme = self.headers.get("X-Forwarded-Proto") or ("https" if HOSTED else "http")
@@ -636,7 +636,7 @@ class Handler(BaseHTTPRequestHandler):
                     # Which build answers: Render sets this on every deploy. With
                     # two services from one repository, it is how to tell what
                     # each is running.
-                    "commit": (os.environ.get("RENDER_GIT_COMMIT") or "")[:7] or None,
+                    "commit": (os.environ.get("RENDER_GIT_COMMIT") or os.environ.get("GIT_COMMIT") or "")[:7] or None,
                     "models": reviews,
                     # The corpus release in place, or None while it is fetched
                     # or if none is configured.
@@ -993,7 +993,11 @@ def main(argv: list[str] | None = None) -> int:
     global PAGE_URL
     PAGE_URL = url
     global HOSTED
-    HOSTED = args.host not in ("127.0.0.1", "localhost", "::1")
+    # Behind a reverse proxy on the same machine (Caddy on the AWS server) the
+    # process listens on 127.0.0.1 and is still public, so the proxy setup says
+    # so explicitly.
+    HOSTED = (args.host not in ("127.0.0.1", "localhost", "::1")
+              or os.environ.get("AI_PEER_REVIEWER_HOSTED") == "1")
 
     server = ThreadingHTTPServer((args.host, args.port), Handler)
     print(f"AI Peer Reviewer — {url}")
