@@ -1,0 +1,25 @@
+# /etc/systemd/system/peerna-dev.service — PeerNa dev (the dev branch) at dev.peerna.haileylab.com (Caddy in front).
+# Keeps the server running and restarts it after a crash or reboot. A review runs in a
+# background thread for minutes, so a restart interrupts it (the checkpoint keeps the work).
+[Unit]
+Description=PeerNa dev (ai_peer_reviewer.serve, dev branch)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=ubuntu
+WorkingDirectory=/home/ubuntu/PeerNa-dev
+EnvironmentFile=/etc/peerna.env
+EnvironmentFile=-/etc/peerna-dev-commit.env
+# dev-only settings; a later file overrides the one above
+EnvironmentFile=-/etc/peerna-dev.env
+# Everything the package keeps (corpus index, checkpoints, job history, quota) hangs
+# off HOME, as /data did on Render.
+Environment=HOME=/home/ubuntu/peerna-dev-data PYTHONUNBUFFERED=1 OPENBLAS_NUM_THREADS=1
+Environment=HOST=127.0.0.1 PORT=8081 AI_PEER_REVIEWER_HOSTED=1
+ExecStart=/home/ubuntu/PeerNa-dev/.venv/bin/python -m ai_peer_reviewer.serve --no-browser
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

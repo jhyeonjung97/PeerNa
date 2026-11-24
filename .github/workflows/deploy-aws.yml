@@ -1,27 +1,30 @@
-# Deploys main to the AWS server (peerna.haileylab.com): pull, install any new
-# requirements, restart. main is pushed only by tests/release.sh, so this runs on a release.
+# Deploys to the AWS server: main -> ~/PeerNa (peerna.haileylab.com), pushed only by
+# tests/release.sh; dev -> ~/PeerNa-dev (dev.peerna.haileylab.com), by tests/deploy.sh.
+# Pull, install any new requirements, restart.
 # Does nothing until the repository variable AWS_HOST and the secret AWS_SSH_KEY are set.
 name: deploy-aws
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
   workflow_dispatch:
 
 jobs:
   deploy:
-    if: ${{ vars.AWS_HOST != '' && github.ref_name == 'main' }}
+    if: ${{ vars.AWS_HOST != '' }}
     runs-on: ubuntu-latest
     steps:
       - name: Pull and restart on the server
         env:
           KEY: ${{ secrets.AWS_SSH_KEY }}
           HOST: ${{ vars.AWS_HOST }}
+          BRANCH: ${{ github.ref_name }}
         run: |
+          if [ "$BRANCH" = "main" ]; then DIR=PeerNa; SVC=peerna; else DIR=PeerNa-dev; SVC=peerna-dev; fi
           install -m 600 /dev/null key && printf '%s\n' "$KEY" > key
-          ssh -i key -o StrictHostKeyChecking=accept-new ubuntu@"$HOST" '
+          ssh -i key -o StrictHostKeyChecking=accept-new ubuntu@"$HOST" "
             set -e
-            test -d ~/PeerNa || exit 0
-            cd ~/PeerNa && git fetch origin main && git checkout main && git reset --hard origin/main
+            test -d ~/$DIR || exit 0
+            cd ~/$DIR && git fetch origin $BRANCH && git checkout $BRANCH && git reset --hard origin/$BRANCH
             .venv/bin/pip install -q -r requirements.txt
-            echo "GIT_COMMIT=$(git rev-parse HEAD)" | sudo tee /etc/peerna-commit.env >/dev/null
-            sudo systemctl restart peerna'
+            echo GIT_COMMIT=\$(git rev-parse HEAD) | sudo tee /etc/$SVC-commit.env >/dev/null
+            sudo systemctl restart $SVC"

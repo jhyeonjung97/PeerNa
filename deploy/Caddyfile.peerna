@@ -5,3 +5,12 @@ peerna.haileylab.com {
 	encode gzip zstd
 	reverse_proxy 127.0.0.1:8080
 }
+
+# PeerNa dev (the dev branch, peerna-dev on port 8081). The password is the same one as
+# ScholyMap dev, in /etc/caddy/dev-auth.caddy on the server, outside the repository.
+# PeerNa's own sign-in uses a cookie, so the password can cover every path.
+dev.peerna.haileylab.com {
+	encode gzip zstd
+	import /etc/caddy/dev-auth*.caddy
+	reverse_proxy 127.0.0.1:8081
+}
