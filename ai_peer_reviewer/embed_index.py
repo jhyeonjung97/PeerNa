@@ -90,15 +90,24 @@ def rebuild(progress=None, since: int = 0) -> int:
     slugs = [r[0] for r in rows]
     texts = [f"{r[1]} {r[2]}".strip() for r in rows]
 
-    vectors = []
-    for start in range(0, len(texts), BATCH):
-        vectors.extend(embed(texts[start:start + BATCH]))
+    # Papers already in the index keep their vectors (a paper's title and
+    # abstract do not change), so adding papers embeds only the new ones.
+    old = {}
+    if VECTORS_PATH.exists() and IDS_PATH.exists():
+        old_vectors = np.load(VECTORS_PATH, mmap_mode="r")
+        old = {slug: i for i, slug in enumerate(json.loads(IDS_PATH.read_text()))}
+    array = np.zeros((len(slugs), old_vectors.shape[1] if old else 1536), dtype="float32")
+    fresh = [i for i, slug in enumerate(slugs) if slug not in old]
+    for i, slug in enumerate(slugs):
+        if slug in old:
+            array[i] = old_vectors[old[slug]]
+    for start in range(0, len(fresh), BATCH):
+        chunk = fresh[start:start + BATCH]
+        vectors = np.array(embed([texts[i] for i in chunk]), dtype="float32")
+        # Stored unit-length so a search is one matrix multiply and no division.
+        array[chunk] = vectors / np.linalg.norm(vectors, axis=1, keepdims=True)
         if progress:
-            progress(min(start + BATCH, len(texts)), len(texts))
-
-    array = np.array(vectors, dtype="float32")
-    # Stored unit-length so a search is one matrix multiply and no division.
-    array /= np.linalg.norm(array, axis=1, keepdims=True)
+            progress(min(start + BATCH, len(fresh)), len(fresh))
     np.save(VECTORS_PATH, array)
     IDS_PATH.write_text(json.dumps(slugs))
     return len(slugs)
@@ -152,16 +161,37 @@ def rebuild_comments(progress=None, since: int = 0, workers: int = 4) -> int:
         shape=(total, COMMENT_DIMENSIONS))
     lock = threading.Lock()
 
+    # Comments already in the index keep their vectors: a stored comment's row
+    # never changes text (re-reading a paper deletes its rows and inserts new
+    # ones), so the same rowid with the same paper is the same comment. Adding
+    # papers then embeds only their comments.
+    reuse: dict[int, int] = {}
+    if not done and COMMENT_VECTORS_PATH.exists() and COMMENT_IDS_PATH.exists():
+        old_ids = json.loads(COMMENT_IDS_PATH.read_text())
+        before = {rowid: (i, slug) for i, (rowid, slug) in enumerate(zip(old_ids["rowid"], old_ids["slug"]))}
+        old_vectors = np.load(COMMENT_VECTORS_PATH, mmap_mode="r")
+        for n, (rowid, slug, _) in enumerate(rows):
+            hit = before.get(rowid)
+            if hit and hit[1] == slug:
+                reuse[n] = hit[0]
+        if reuse:
+            positions = np.fromiter(reuse.keys(), dtype=np.int64)
+            sources = np.fromiter(reuse.values(), dtype=np.int64)
+            for start in range(0, len(positions), 100_000):
+                array[positions[start:start + 100_000]] = old_vectors[sources[start:start + 100_000]]
+
     def save_state() -> None:
         array.flush()
         state_path.write_text(json.dumps({"key": key, "done": sorted(done)}))
 
     def one(start: int) -> None:
-        chunk = [r[2] for r in rows[start:start + BATCH]]
-        vectors = np.array(embed(chunk, dimensions=COMMENT_DIMENSIONS), dtype="float32")
-        # Stored unit-length, as the paper vectors are.
-        vectors /= np.linalg.norm(vectors, axis=1, keepdims=True)
-        array[start:start + len(chunk)] = vectors.astype("float16")
+        chunk = [n for n in range(start, min(start + BATCH, total)) if n not in reuse]
+        if chunk:
+            vectors = np.array(embed([rows[n][2] for n in chunk], dimensions=COMMENT_DIMENSIONS),
+                               dtype="float32")
+            # Stored unit-length, as the paper vectors are.
+            vectors /= np.linalg.norm(vectors, axis=1, keepdims=True)
+            array[chunk] = vectors.astype("float16")
         with lock:
             done.add(start)
             if len(done) % 20 == 0:
